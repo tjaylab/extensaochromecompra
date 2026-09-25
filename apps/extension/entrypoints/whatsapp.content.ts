@@ -30,9 +30,9 @@ export default defineContentScript({
     shadow.innerHTML = `
       <style>
         button{display:flex;align-items:center;gap:8px;height:36px;padding:0 14px;border:none;border-radius:999px;
-          background:#1E6B55;color:#fff;font:600 14px system-ui,sans-serif;cursor:pointer;box-shadow:0 4px 14px rgba(20,73,58,.3)}
-        button:hover{background:#14493A}
-        button:focus-visible{outline:2px solid #14493A;outline-offset:2px}
+          background:#2563EB;color:#fff;font:600 14px system-ui,sans-serif;cursor:pointer;box-shadow:0 4px 14px rgba(20,73,58,.3)}
+        button:hover{background:#1D4ED8}
+        button:focus-visible{outline:2px solid #1D4ED8;outline-offset:2px}
       </style>
       <button type="button" aria-label="Registrar cotação com o texto selecionado">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 5h16v14H4z"/><path d="M8 9h8M8 13h5"/></svg>

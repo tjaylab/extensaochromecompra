@@ -94,7 +94,7 @@ export function Order({ id }: { id: string }) {
         <span className="section-label">Fornecedor</span>
         <strong>{o.supplier.name}</strong>
         {o.supplier.omie_id ? (
-          <span className="small" style={{ color: 'var(--accent-ink)' }}>Vinculado ao fornecedor do Omie</span>
+          <span className="small" style={{ color: 'var(--success-ink)' }}>Vinculado ao fornecedor do Omie</span>
         ) : o.supplier.cnpj ? (
           <span className="small muted">CNPJ {formatCnpj(o.supplier.cnpj)} · será localizado ou cadastrado no Omie no envio</span>
         ) : (
@@ -199,7 +199,7 @@ function ItemProduct({ item, currency, onPick }: { item: OrderDTO['items'][numbe
       </div>
       {item.omie_product_id ? (
         <div className="row-between">
-          <span className="small" style={{ color: 'var(--accent-ink)' }}>Produto no Omie: {item.omie_product_label}</span>
+          <span className="small" style={{ color: 'var(--success-ink)' }}>Produto no Omie: {item.omie_product_label}</span>
           <button type="button" className="btn-link small" onClick={() => onPick(null)}>Trocar</button>
         </div>
       ) : (
@@ -250,7 +250,7 @@ function OrderResult({ o, onDone, onOrders }: { o: OrderDTO; onDone: () => void;
         <Spinner label={`Enviando para o Omie…${o.attempts > 1 ? ` (tentativa ${o.attempts})` : ''}`} />
       ) : (
         <div className="stack" style={{ gap: 6 }}>
-          <div style={{ width: 48, height: 48, borderRadius: '50%', background: 'var(--accent-soft)', color: 'var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ width: 48, height: 48, borderRadius: '50%', background: 'var(--success-soft)', color: 'var(--success)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <Icon name="check" size={26} />
           </div>
           <strong style={{ fontSize: 18 }}>Pedido enviado ao Omie</strong>

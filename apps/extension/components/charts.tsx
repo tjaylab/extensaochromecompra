@@ -3,9 +3,9 @@ import { formatMoney, isoToBr } from '@compras/shared';
 
 // Small, dependency-free SVG charts for the narrow side panel.
 // Series color validated against the panel surface (lightness band, chroma floor, contrast >= 3:1).
-const SERIES = '#1F8A65';
-const GRID = '#ECE9E3';
-const AXIS_TEXT = '#5E625F';
+const SERIES = '#2563EB';
+const GRID = '#E2E8F0';
+const AXIS_TEXT = '#5B6478';
 const W = 360; // viewBox width; the SVG scales to the panel width
 
 const compactFmt = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', notation: 'compact', maximumFractionDigits: 1 });
@@ -37,7 +37,7 @@ function Tooltip({ x, children }: { x: number; children: ReactNode }) {
         top: 20,
         left: `${pct}%`,
         transform: 'translateX(-50%)',
-        background: '#1B1D1C',
+        background: '#172033',
         color: '#fff',
         fontSize: 12,
         lineHeight: 1.4,
@@ -125,7 +125,7 @@ export function MonthlyBars({ data }: { data: { month: string; total: number; or
                 <text x={cx} y={H - 6} textAnchor="middle" fontSize={10} fill={AXIS_TEXT}>{monthLabel(d.month)}</text>
               )}
               {i === peak && d.total > 0 && (
-                <text x={cx > W - 40 ? cx + barW / 2 : cx} y={top - 5} textAnchor={cx > W - 40 ? 'end' : 'middle'} fontSize={10} fill="#1B1D1C">{compact.format(d.total)}</text>
+                <text x={cx > W - 40 ? cx + barW / 2 : cx} y={top - 5} textAnchor={cx > W - 40 ? 'end' : 'middle'} fontSize={10} fill="#172033">{compact.format(d.total)}</text>
               )}
               {/* Hit target: the whole band, larger than the bar. */}
               <rect
@@ -248,7 +248,7 @@ export function PriceHistory({ series }: { series: { description: string; points
               </g>
             ))}
             {/* End label: the latest price. */}
-            <text x={x(times[times.length - 1]!) + 8} y={y(last.unit_price) + 4} fontSize={11} fill="#1B1D1C">{compact.format(last.unit_price)}</text>
+            <text x={x(times[times.length - 1]!) + 8} y={y(last.unit_price) + 4} fontSize={11} fill="#172033">{compact.format(last.unit_price)}</text>
           </svg>
         </>
       )}

@@ -129,8 +129,11 @@ export function Header({ title }: { title: string }) {
           <Icon name="back" />
         </button>
       )}
+      <img src="/brand/mark.png" alt="" width={26} height={26} style={{ flexShrink: 0 }} />
       <div className="header-title">
-        <span className="header-kicker">ProcureMate</span>
+        <span className="header-kicker brand-name" style={{ fontSize: 11 }}>
+          Procure<span>mate</span>
+        </span>
         <span className="header-name">{title}</span>
       </div>
       <OmieChip />

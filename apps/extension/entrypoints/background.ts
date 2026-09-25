@@ -104,7 +104,7 @@ export default defineBackground(() => {
       // Session storage holds 10 MB: a very large file goes without its data (the panel then asks to attach it).
       .catch(() => chrome.storage.session.set({ [SUGGESTION_KEY]: { ...suggestion, attachment: null } }))
       .then(() => chrome.action.setBadgeText({ text: '•' }))
-      .then(() => chrome.action.setBadgeBackgroundColor({ color: '#1E6B55' }))
+      .then(() => chrome.action.setBadgeBackgroundColor({ color: '#2563EB' }))
       .catch(() => {});
   });
 
@@ -135,5 +135,5 @@ async function storeCapture(c: Omit<Capture, 'id'>) {
   await chrome.storage.session.set({ [PENDING_CAPTURE_KEY]: capture });
   // If the panel could not be opened (no user gesture), the badge tells the buyer to click the icon.
   await chrome.action.setBadgeText({ text: '1' });
-  await chrome.action.setBadgeBackgroundColor({ color: '#1E6B55' });
+  await chrome.action.setBadgeBackgroundColor({ color: '#2563EB' });
 }

@@ -64,7 +64,7 @@ export function Quotes({ flash }: { flash?: string }) {
       {[...comparable.entries()]
         .filter(([, c]) => c.count > 1)
         .map(([id, c]) => (
-          <button key={id} type="button" className="card card-button" style={{ flexDirection: 'row', justifyContent: 'space-between', borderColor: '#b9d3c8', background: '#f1f7f4' }} onClick={() => nav.go({ name: 'compare', id })}>
+          <button key={id} type="button" className="card card-button" style={{ flexDirection: 'row', justifyContent: 'space-between', borderColor: '#BFDBFE', background: '#EFF6FF' }} onClick={() => nav.go({ name: 'compare', id })}>
             <span><strong>{c.number}</strong> tem {c.count} propostas</span>
             <strong style={{ color: 'var(--accent-ink)' }}>Comparar →</strong>
           </button>

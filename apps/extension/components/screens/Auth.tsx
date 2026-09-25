@@ -42,7 +42,12 @@ export function Login({ onSignedIn }: { onSignedIn: () => void }) {
     <div className="app">
       <main className="body" style={{ justifyContent: 'center' }}>
         <div className="stack" style={{ gap: 4 }}>
-          <span className="header-kicker">ProcureMate</span>
+          <div className="brand" style={{ marginBottom: 8 }}>
+            <img src="/brand/mark.png" alt="" style={{ width: 40, height: 40 }} />
+            <span className="brand-name" style={{ fontSize: 22 }}>
+              Procure<span>mate</span>
+            </span>
+          </div>
           <h1 style={{ margin: 0, fontSize: 22 }}>{mode === 'in' ? 'Entrar' : 'Criar conta'}</h1>
           <span className="muted">Registre cotações recebidas no WhatsApp em poucos segundos.</span>
         </div>
@@ -106,7 +111,12 @@ export function Onboarding({ me, onDone }: { me: MeDTO; onDone: () => void }) {
     <div className="app">
       <main className="body" style={{ justifyContent: 'center' }}>
         <div className="stack" style={{ gap: 4 }}>
-          <span className="header-kicker">ProcureMate</span>
+          <div className="brand" style={{ marginBottom: 8 }}>
+            <img src="/brand/mark.png" alt="" style={{ width: 40, height: 40 }} />
+            <span className="brand-name" style={{ fontSize: 22 }}>
+              Procure<span>mate</span>
+            </span>
+          </div>
           <h1 style={{ margin: 0, fontSize: 22 }}>Sua empresa</h1>
           <span className="muted">
             Você entrou como {me.user.email}. Se alguém da sua empresa já usa o ProcureMate, peça um convite para este e-mail em vez de criar outra empresa.

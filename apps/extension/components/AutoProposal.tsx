@@ -176,12 +176,12 @@ export function AutoProposal() {
   const what = src?.kind === 'pdf' ? `o PDF "${src.fileName}"` : src?.kind === 'image' ? 'a imagem' : 'a conversa';
 
   return (
-    <section className="card" role="status" aria-live="polite" style={{ background: 'var(--accent-soft)', borderColor: '#B9D3C8', gap: 10 }}>
+    <section className="card card-ai" role="status" aria-live="polite" style={{ gap: 10 }}>
       {phase.name === 'reading' && <Spinner label={`Lendo ${what} de ${who}…`} />}
 
       {phase.name === 'offer' && (
         <>
-          <strong style={{ color: 'var(--accent-ink)' }}>
+          <strong style={{ color: 'var(--ai-ink)' }}>
             {phase.src.kind === 'pdf' && !phase.src.attachment
               ? `${who} enviou o PDF "${phase.src.fileName}". Clique para baixar no WhatsApp que eu leio na hora.`
               : `Possível proposta de ${who}`}
@@ -199,7 +199,7 @@ export function AutoProposal() {
 
       {phase.name === 'saved' && (
         <>
-          <div className="row" style={{ color: 'var(--accent-ink)' }}>
+          <div className="row" style={{ color: 'var(--success-ink)' }}>
             <Icon name="check" />
             <strong>Cotação {phase.quote.number} salva · {formatMoney(phase.quote.total, phase.quote.currency)}</strong>
           </div>
@@ -212,7 +212,7 @@ export function AutoProposal() {
 
       {phase.name === 'error' && (
         <>
-          <strong style={{ color: 'var(--accent-ink)' }}>{phase.message}</strong>
+          <strong style={{ color: 'var(--ai-ink)' }}>{phase.message}</strong>
           <div className="row" style={{ justifyContent: 'flex-end' }}>
             <button type="button" className="btn btn-secondary" onClick={dismiss}>Fechar</button>
             {phase.src && <button type="button" className="btn btn-outline" onClick={() => openReview(phase.src!, null)}>Preencher manualmente</button>}
@@ -235,7 +235,7 @@ function Ready({ src, ex, onSave, onReview, onIgnore }: { src: Source; ex: Extra
   ].filter(Boolean);
   return (
     <>
-      <div className="stack" style={{ gap: 2, color: 'var(--accent-ink)' }}>
+      <div className="stack" style={{ gap: 2, color: 'var(--ai-ink)' }}>
         <span className="small">Proposta lida automaticamente {src.kind === 'pdf' ? `do PDF "${src.fileName}"` : src.kind === 'image' ? 'da imagem' : 'da conversa'}</span>
         <strong style={{ fontSize: 15 }}>{supplier}</strong>
       </div>
@@ -250,7 +250,7 @@ function Ready({ src, ex, onSave, onReview, onIgnore }: { src: Source; ex: Extra
           </div>
         ))}
         {total != null && (
-          <div className="row-between small" style={{ borderTop: '1px solid #B9D3C8', paddingTop: 4 }}>
+          <div className="row-between small" style={{ borderTop: '1px solid var(--ai-line)', paddingTop: 4 }}>
             <strong>Total</strong>
             <strong className="mono">{formatMoney(total, d.moeda ?? undefined)}</strong>
           </div>
