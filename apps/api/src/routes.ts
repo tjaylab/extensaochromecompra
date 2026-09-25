@@ -5,6 +5,7 @@ import {
   CreateRequisitionInput,
   EventInput,
   ExtractionRequest,
+  LinkSupplierInput,
   UpdateOrderInput,
   UpdateQuoteInput,
 } from '@compras/shared';
@@ -19,6 +20,7 @@ import { createDraft, getOrder, listOrders, sendOrder, updateOrder } from './ser
 import { createQuote, getQuote, listQuotes, updateQuote } from './services/quotes.js';
 import { createRequisition, getComparison, getRequisition, listRequisitions } from './services/requisitions.js';
 import { listSuppliers, updateSupplier } from './services/suppliers.js';
+import { getSupplierContext, linkSupplier, syncOmieOrders, syncOmieSuppliers } from './services/supplier-context.js';
 
 function parse<T extends z.ZodType>(schema: T, data: unknown): z.infer<T> {
   const r = schema.safeParse(data ?? {});
@@ -60,7 +62,12 @@ export function registerRoutes(app: FastifyInstance, ctx: AppContext) {
     const m = member(req);
     const result = await saveOmieCredentials(ctx, m, body);
     // Warm the catalog cache in the background.
-    Promise.all([syncProducts(ctx, m.companyId, true), syncPaymentTerms(ctx, m.companyId, true)]).catch((err) =>
+    Promise.all([
+      syncProducts(ctx, m.companyId, true),
+      syncPaymentTerms(ctx, m.companyId, true),
+      syncOmieSuppliers(ctx, m.companyId),
+      syncOmieOrders(ctx, m.companyId),
+    ]).catch((err) =>
       ctx.log.warn({ err: String(err) }, 'catalog warm-up failed'),
     );
     return result;
@@ -74,6 +81,14 @@ export function registerRoutes(app: FastifyInstance, ctx: AppContext) {
 
   // --- Suppliers ------------------------------------------------------------
   app.get('/v1/suppliers', async (req) => listSuppliers(ctx, member(req), (req.query as { q?: string }).q));
+
+  // The supplier of the open WhatsApp conversation, with purchase and quote history.
+  app.get('/v1/suppliers/context', async (req) => {
+    const q = parse(z.object({ name: z.string().max(200).optional(), phone: z.string().max(40).optional() }), req.query);
+    if (!q.name && !q.phone) throw badRequest('Informe o nome ou o telefone do contato');
+    return getSupplierContext(ctx, member(req), { name: q.name ?? null, phone: q.phone ?? null });
+  });
+  app.post('/v1/suppliers/link', async (req) => linkSupplier(ctx, member(req), parse(LinkSupplierInput, req.body)));
 
   app.patch('/v1/suppliers/:id', async (req) => {
     const { id } = parse(Id, req.params);

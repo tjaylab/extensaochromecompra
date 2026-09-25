@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { isInConversation, readContact, readConversation } from './whatsapp-dom';
+import { isInConversation, phoneFromMessageIds, readContact, readConversation } from './whatsapp-dom';
 
 // Mirrors the parts of WhatsApp Web's markup the extension relies on.
 const msg = (dir: 'in' | 'out', meta: string, text: string, extra = '') => `
@@ -51,7 +51,13 @@ describe('readConversation', () => {
 });
 
 describe('contact and selection scope', () => {
-  it('reads the contact from the conversation header', () => {
+  it('reads the contact from the header and the phone from the message ids', () => {
+    expect(readContact()).toEqual({ contactName: 'Carlos (Microsemi)', contactPhone: '+5511970001234' });
+  });
+  it('gives no phone for group chats or privacy ids', () => {
+    document.querySelectorAll('[data-id]').forEach((el) => el.setAttribute('data-id', 'false_120363025@g.us_ABC'));
+    expect(phoneFromMessageIds()).toBeNull();
+    document.querySelectorAll('[data-id]').forEach((el) => el.setAttribute('data-id', 'false_98765432109876@lid_ABC'));
     expect(readContact()).toEqual({ contactName: 'Carlos (Microsemi)', contactPhone: null });
   });
   it('treats a phone-number title as the phone', () => {

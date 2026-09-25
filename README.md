@@ -36,7 +36,7 @@ npm run build:ext
 
 `apps/extension/.env` controla para qual API e qual modo de login a extensão aponta (veja `apps/extension/.env.example`). Para desenvolver com recarga automática: `npm run dev:ext`.
 
-Para testar o painel numa aba comum, sem instalar a extensão: `npm run preview:panel` e abra http://localhost:5174. No console, `__capture('Consigo 30 fontes…', 'Carlos (Microsemi)', '+55 11 97000-1234')` simula uma seleção no WhatsApp.
+Para testar o painel numa aba comum, sem instalar a extensão: `npm run preview:panel` e abra http://localhost:5174. No console: `__openChat('Carlos (Microsemi)', '+55 11 97000-1234')` simula abrir uma conversa (mostra o histórico do fornecedor), `__conversation = [...]` define as mensagens lidas por "Registrar da conversa aberta" e `__capture('Consigo 30 fontes…', 'Carlos (Microsemi)')` simula uma seleção.
 
 ### Testes
 

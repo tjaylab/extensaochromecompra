@@ -30,7 +30,20 @@ export function isInConversation(node: Node | null): boolean {
   return !!el && root.contains(el) && !el.closest('footer');
 }
 
-/** Contact name and, when WhatsApp shows it, the phone of the open conversation. */
+/**
+ * The phone of a one-to-one chat, from the message ids ("false_5511970001234@c.us_3EB0…").
+ * Group chats (@g.us) and accounts shown by privacy id (@lid) give null.
+ */
+export function phoneFromMessageIds(root: ParentNode | null = conversationRoot()): string | null {
+  if (!root) return null;
+  for (const el of root.querySelectorAll('[data-id]')) {
+    const m = el.getAttribute('data-id')?.match(/^(?:true|false)_(\d{10,15})@c\.us/);
+    if (m) return `+${m[1]}`;
+  }
+  return null;
+}
+
+/** Contact name and, when available, the phone of the open conversation. */
 export function readContact(): { contactName: string | null; contactPhone: string | null } {
   let title: string | null = null;
   for (const sel of HEADER_TITLE_SELECTORS) {
@@ -43,9 +56,9 @@ export function readContact(): { contactName: string | null; contactPhone: strin
   }
   if (!title) return { contactName: null, contactPhone: null };
   if (PHONE_RE.test(title)) return { contactName: null, contactPhone: title };
-  // Saved contacts sometimes expose the number in the header's subtitle.
+  // Saved contacts: the number may be in the header's subtitle or in the message ids.
   const subtitle = document.querySelector('#main header span[title*="+"]')?.getAttribute('title')?.trim() ?? null;
-  return { contactName: title, contactPhone: subtitle && PHONE_RE.test(subtitle) ? subtitle : null };
+  return { contactName: title, contactPhone: subtitle && PHONE_RE.test(subtitle) ? subtitle : phoneFromMessageIds() };
 }
 
 function directionOf(el: Element): 'in' | 'out' {

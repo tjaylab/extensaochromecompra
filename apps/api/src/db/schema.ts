@@ -42,9 +42,62 @@ export const suppliers = pgTable('suppliers', {
   cnpj: text('cnpj'),
   email: text('email'),
   omieId: omieId('omie_id'),
+  whatsappAliases: text('whatsapp_aliases').array().notNull().default([]),
   createdBy: uuid('created_by'),
   createdAt: ts('created_at').notNull().defaultNow(),
 });
+
+export const omieSuppliers = pgTable(
+  'omie_suppliers',
+  {
+    companyId: uuid('company_id').notNull(),
+    omieId: omieId('omie_id').notNull(),
+    name: text('name').notNull(),
+    tradeName: text('trade_name'),
+    cnpj: text('cnpj'),
+    phoneKeys: text('phone_keys').array().notNull().default([]),
+    phones: text('phones').array().notNull().default([]),
+    email: text('email'),
+    tags: text('tags').array().notNull().default([]),
+    nameNormalized: text('name_normalized').notNull(),
+    syncedAt: ts('synced_at').notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.companyId, t.omieId] })],
+);
+
+export const omiePurchaseOrders = pgTable(
+  'omie_purchase_orders',
+  {
+    companyId: uuid('company_id').notNull(),
+    omieId: omieId('omie_id').notNull(),
+    number: text('number'),
+    supplierOmieId: omieId('supplier_omie_id').notNull(),
+    createdOn: date('created_on', { mode: 'string' }).notNull(),
+    stage: text('stage'),
+    total: numeric('total', { precision: 14, scale: 2, mode: 'number' }).notNull(),
+    items: jsonb('items').$type<OmiePOItem[]>().notNull().default([]),
+    syncedAt: ts('synced_at').notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.companyId, t.omieId] })],
+);
+
+export interface OmiePOItem {
+  omie_product_id: number | null;
+  description: string;
+  quantity: number;
+  unit_price: number;
+  total: number;
+}
+
+export const omieSyncState = pgTable(
+  'omie_sync_state',
+  {
+    companyId: uuid('company_id').notNull(),
+    kind: text('kind').notNull(),
+    syncedAt: ts('synced_at').notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.companyId, t.kind] })],
+);
 
 export const requisitions = pgTable('requisitions', {
   id: uuid('id').primaryKey().defaultRandom(),

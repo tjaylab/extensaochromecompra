@@ -139,6 +139,52 @@ export interface SupplierDTO {
   omie_id: number | null;
 }
 
+export interface OmieSupplierDTO {
+  omie_id: number;
+  name: string;
+  trade_name: string | null;
+  cnpj: string | null;
+  phones: string[];
+  email: string | null;
+  is_supplier: boolean; // has the "Fornecedor" tag
+}
+
+/** What the side panel shows when a WhatsApp conversation is opened. */
+export interface SupplierContextDTO {
+  contact: { name: string | null; phone: string | null };
+  /** How the conversation was recognized. */
+  match: 'phone' | 'alias' | 'name' | null;
+  supplier: SupplierDTO | null;
+  omie_supplier: OmieSupplierDTO | null;
+  /** When nothing matched: likely suppliers for the buyer to confirm. */
+  candidates: OmieSupplierDTO[];
+  omie: {
+    available: boolean; // false when Omie is not connected or unreachable
+    synced_at: string | null;
+    orders_12m: number;
+    spent_12m: number;
+    average_ticket: number | null;
+    last_order: { number: string | null; date: string; total: number } | null;
+    recent_orders: { number: string | null; date: string; total: number; items: string }[];
+    top_products: { description: string; quantity: number; total: number; last_unit_price: number; last_date: string }[];
+  };
+  quotes: {
+    total: number;
+    ordered: number;
+    last: { id: string; number: string; date: string; total: number; currency: string } | null;
+    average_delivery_days: number | null;
+    recent: { id: string; number: string; date: string; total: number; currency: string; status: QuoteStatus }[];
+  };
+}
+
+export const LinkSupplierInput = z.object({
+  omie_id: z.number().int().nullish(),
+  supplier_id: z.string().uuid().nullish(),
+  contact_name: z.string().max(200).nullish(),
+  contact_phone: z.string().max(40).nullish(),
+});
+export type LinkSupplierInput = z.infer<typeof LinkSupplierInput>;
+
 export interface SupplierMatch {
   supplier: SupplierDTO | null;
   reason: 'phone' | 'name' | null;

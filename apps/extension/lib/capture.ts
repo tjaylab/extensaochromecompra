@@ -42,6 +42,12 @@ export function blobToDataUrl(blob: Blob): Promise<string> {
   });
 }
 
+export type ContactChangedMessage = { type: 'contact-changed'; contact: ContactResponse };
+
+/** The contact of the conversation open in WhatsApp Web right now (kept by the service worker). */
+export const ACTIVE_CONTACT_KEY = 'activeContact';
+export type ActiveContact = ContactResponse & { at: number };
+
 export const PENDING_CAPTURE_KEY = 'pendingCapture';
 /** Set by the service worker when a capture fails (e.g. an image it could not read). */
 export const CAPTURE_ERROR_KEY = 'captureError';

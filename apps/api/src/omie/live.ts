@@ -1,5 +1,12 @@
 import type { OmiePaymentTermDTO, OmieProductDTO } from '@compras/shared';
-import { OmieError, type OmieGateway, type OmieOrderInput, type OmieSupplierInput } from './gateway.js';
+import {
+  OmieError,
+  type OmieGateway,
+  type OmieOrderInput,
+  type OmiePurchaseOrderRecord,
+  type OmieSupplierInput,
+  type OmieSupplierRecord,
+} from './gateway.js';
 
 const BASE_URL = 'https://app.omie.com.br/api/v1/';
 const PAGE_SIZE = 500;
@@ -113,6 +120,84 @@ export class LiveOmie implements OmieGateway {
     return out;
   }
 
+  async listSuppliers(): Promise<OmieSupplierRecord[]> {
+    const out: OmieSupplierRecord[] = [];
+    for (let page = 1; page <= 100; page++) {
+      let body: { total_de_paginas?: number; clientes_cadastro?: Record<string, unknown>[] };
+      try {
+        body = await this.call('geral/clientes/', 'ListarClientes', { pagina: page, registros_por_pagina: PAGE_SIZE, apenas_importado_api: 'N' });
+      } catch (err) {
+        if (LiveOmie.isEmptyPage(err)) break;
+        throw err;
+      }
+      for (const c of body.clientes_cadastro ?? []) {
+        if (c.inativo === 'S') continue;
+        const phones = [
+          [c.telefone1_ddd, c.telefone1_numero],
+          [c.telefone2_ddd, c.telefone2_numero],
+        ]
+          .filter(([, n]) => n)
+          .map(([ddd, n]) => ({ ddd: ddd ? String(ddd) : null, number: String(n) }));
+        out.push({
+          omie_id: Number(c.codigo_cliente_omie),
+          name: decodeHtml(String(c.razao_social ?? c.nome_fantasia ?? '')),
+          trade_name: c.nome_fantasia ? decodeHtml(String(c.nome_fantasia)) : null,
+          cnpj: c.cnpj_cpf ? String(c.cnpj_cpf).replace(/\D/g, '') : null,
+          phones,
+          email: c.email ? String(c.email) : null,
+          tags: Array.isArray(c.tags) ? (c.tags as { tag?: string }[]).map((t) => String(t.tag ?? '')).filter(Boolean) : [],
+        });
+      }
+      if (!body.total_de_paginas || page >= body.total_de_paginas) break;
+    }
+    return out;
+  }
+
+  async listPurchaseOrders(from: string, to: string): Promise<OmiePurchaseOrderRecord[]> {
+    const out: OmiePurchaseOrderRecord[] = [];
+    for (let page = 1; page <= 200; page++) {
+      let body: { nTotalPaginas?: number; pedidos_pesquisa?: Record<string, any>[] };
+      try {
+        body = await this.call('produtos/pedidocompra/', 'PesquisarPedCompra', {
+          nPagina: page,
+          nRegsPorPagina: 100,
+          dDataInicial: from,
+          dDataFinal: to,
+          lExibirPedidosPendentes: true,
+          lExibirPedidosFaturados: true,
+          lExibirPedidosRecebidos: true,
+          lExibirPedidosEncerrados: true,
+          lExibirPedidosRecParciais: true,
+          lExibirPedidosFatParciais: true,
+          lExibirPedidosCancelados: false,
+        });
+      } catch (err) {
+        if (LiveOmie.isEmptyPage(err)) break;
+        throw err;
+      }
+      for (const p of body.pedidos_pesquisa ?? []) {
+        const h = p.cabecalho_consulta ?? {};
+        out.push({
+          omie_id: Number(h.nCodPed),
+          number: h.cNumero ? String(h.cNumero) : null,
+          supplier_omie_id: Number(h.nCodFor),
+          created_on: String(h.dIncData ?? ''),
+          stage: h.cEtapa ? String(h.cEtapa) : null,
+          freight: Number(p.frete_consulta?.nValFrete ?? 0),
+          items: ((p.produtos_consulta ?? []) as Record<string, any>[]).map((i) => ({
+            omie_product_id: i.nCodProd ? Number(i.nCodProd) : null,
+            description: cleanDescription(decodeHtml(String(i.cDescricao ?? ''))),
+            quantity: Number(i.nQtde ?? 0),
+            unit_price: Number(i.nValUnit ?? 0),
+            total: Number(i.nValTot ?? i.nValMerc ?? 0),
+          })),
+        });
+      }
+      if (!body.nTotalPaginas || page >= body.nTotalPaginas) break;
+    }
+    return out;
+  }
+
   async findSupplierByCnpj(cnpj: string): Promise<number | null> {
     try {
       const body = await this.call<{ clientes_cadastro?: { codigo_cliente_omie: number }[] }>('geral/clientes/', 'ListarClientes', {
@@ -165,4 +250,20 @@ export class LiveOmie implements OmieGateway {
     });
     return { nCodPed: Number(body.nCodPed), cNumero: body.cNumero ?? null };
   }
+}
+
+/** Omie returns some text HTML-escaped ("NORONHA &amp; NORONHA"). */
+export function decodeHtml(s: string): string {
+  return s
+    .replace(/&amp;/g, '&')
+    .replace(/&quot;/g, '"')
+    .replace(/&#0?39;|&apos;/g, "'")
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .trim();
+}
+
+/** Drops Omie's variant markers: "Câmera Dahua   [spec]Resol. 4MP [est]ops" -> "Câmera Dahua". */
+export function cleanDescription(s: string): string {
+  return s.split(/\s*\[(?:spec|est)\]/i)[0]!.replace(/\s+/g, ' ').trim();
 }

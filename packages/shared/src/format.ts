@@ -60,6 +60,19 @@ export function normalizePhone(phone: string | null | undefined): string | null 
   return `+${digits}`;
 }
 
+/**
+ * Key for matching Brazilian phones across sources: DDD + last 8 digits.
+ * "+55 11 97000-1234", "(11) 7000-1234" and Omie's DDD "11" + "97000-1234" all give "1170001234",
+ * so numbers saved with or without the 9th digit still match.
+ */
+export function phoneKey(phone: string | null | undefined, ddd?: string | null): string | null {
+  let d = ((ddd ?? '') + (phone ?? '')).replace(/\D/g, '');
+  if (d.length >= 12 && d.startsWith('55')) d = d.slice(2);
+  d = d.replace(/^0+/, ''); // trunk prefix "011"
+  if (d.length < 10) return null;
+  return d.slice(0, 2) + d.slice(-8);
+}
+
 export function onlyDigits(s: string | null | undefined): string {
   return (s ?? '').replace(/\D/g, '');
 }

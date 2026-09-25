@@ -1,5 +1,12 @@
 import type { OmiePaymentTermDTO, OmieProductDTO } from '@compras/shared';
-import { OmieError, type OmieGateway, type OmieOrderInput, type OmieSupplierInput } from './gateway.js';
+import {
+  OmieError,
+  type OmieGateway,
+  type OmieOrderInput,
+  type OmiePurchaseOrderRecord,
+  type OmieSupplierInput,
+  type OmieSupplierRecord,
+} from './gateway.js';
 
 // In-memory Omie for development and tests. State is kept per company for the process lifetime.
 
@@ -18,6 +25,30 @@ const TERMS: OmiePaymentTermDTO[] = [
   { code: 'S36', description: '30/60 dias', installments: 2 },
   { code: 'T39', description: '30/60/90 dias', installments: 3 },
 ];
+
+const SUPPLIERS: OmieSupplierRecord[] = [
+  { omie_id: 9100001, name: 'MICROSEMI DISTRIBUIDORA LTDA', trade_name: 'Microsemi', cnpj: '04252011000110', phones: [{ ddd: '11', number: '7000-1234' }], email: 'vendas@microsemi.example', tags: ['Fornecedor'] },
+  { omie_id: 9100002, name: 'ELETRONICA PAULISTA COMERCIO LTDA', trade_name: 'Eletrônica Paulista', cnpj: '11222333000181', phones: [{ ddd: '11', number: '3222-4100' }], email: null, tags: ['Fornecedor'] },
+  { omie_id: 9100003, name: 'TECNOPARTS IMPORTACAO LTDA', trade_name: 'Tecnoparts', cnpj: '11444777000161', phones: [{ ddd: '19', number: '99810-2233' }], email: null, tags: ['Fornecedor', 'Transportadora'] },
+  // Same phone as Microsemi but registered as a client: the supplier must win.
+  { omie_id: 9100004, name: 'CARLOS ALBERTO ME', trade_name: null, cnpj: null, phones: [{ ddd: '11', number: '97000-1234' }], email: null, tags: ['Cliente'] },
+];
+
+/** DD/MM/YYYY, `days` before today. */
+function daysAgo(days: number) {
+  const d = new Date(Date.now() - days * 86_400_000);
+  return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
+}
+
+function mockOrders(): OmiePurchaseOrderRecord[] {
+  const fonte = { omie_product_id: 4100412, description: 'Fonte chaveada 24V 10A' };
+  return [
+    { omie_id: 7701001, number: '1301', supplier_omie_id: 9100001, created_on: daysAgo(20), stage: '15', freight: 0, items: [{ ...fonte, quantity: 20, unit_price: 598.5, total: 11970 }] },
+    { omie_id: 7701002, number: '1288', supplier_omie_id: 9100001, created_on: daysAgo(75), stage: '15', freight: 0, items: [{ ...fonte, quantity: 10, unit_price: 612, total: 6120 }, { omie_product_id: 4100398, description: 'Fonte chaveada 24V 5A', quantity: 15, unit_price: 310, total: 4650 }] },
+    { omie_id: 7701003, number: '1250', supplier_omie_id: 9100001, created_on: daysAgo(160), stage: '15', freight: 0, items: [{ ...fonte, quantity: 12, unit_price: 620, total: 7440 }] },
+    { omie_id: 7701004, number: '1299', supplier_omie_id: 9100002, created_on: daysAgo(30), stage: '15', freight: 0, items: [{ omie_product_id: 4100220, description: 'Cabo PP 3x2,5mm', quantity: 500, unit_price: 8.42, total: 4210 }] },
+  ];
+}
 
 interface MockState {
   suppliers: Map<string, number>; // cnpj -> id
@@ -51,6 +82,12 @@ export class MockOmie implements OmieGateway {
   }
 
   async testConnection() {}
+  async listSuppliers() {
+    return SUPPLIERS;
+  }
+  async listPurchaseOrders() {
+    return mockOrders();
+  }
   async listProducts() {
     return PRODUCTS;
   }

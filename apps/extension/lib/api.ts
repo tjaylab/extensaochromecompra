@@ -13,6 +13,8 @@ import type {
   QuoteDTO,
   RequisitionDTO,
   SupplierDTO,
+  SupplierContextDTO,
+  LinkSupplierInput,
   UpdateOrderInput,
   UpdateQuoteInput,
 } from '@compras/shared';
@@ -71,6 +73,9 @@ export const api = {
     request<ExtractionResponse>('POST', '/v1/extractions', body),
 
   suppliers: (q?: string) => request<SupplierDTO[]>('GET', `/v1/suppliers${qs({ q })}`),
+  supplierContext: (name: string | null, phone: string | null) =>
+    request<SupplierContextDTO>('GET', `/v1/suppliers/context${qs({ name, phone })}`),
+  linkSupplier: (body: LinkSupplierInput) => request<SupplierContextDTO>('POST', '/v1/suppliers/link', body),
   updateSupplier: (id: string, body: Partial<Pick<SupplierDTO, 'name' | 'phone' | 'cnpj' | 'email'>>) => request<SupplierDTO>('PATCH', `/v1/suppliers/${id}`, body),
 
   createQuote: (body: CreateQuoteInput) => request<QuoteDTO>('POST', '/v1/quotes', body),

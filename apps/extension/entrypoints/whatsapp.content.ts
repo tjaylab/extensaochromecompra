@@ -3,6 +3,7 @@ import {
   blobToDataUrl,
   splitDataUrl,
   type CaptureMessage,
+  type ContactChangedMessage,
   type ContactRequest,
   type ContactResponse,
   type ConversationRequest,
@@ -98,6 +99,23 @@ export default defineContentScript({
         }
       },
     );
+
+    // Tell the side panel when the buyer switches conversations, so it shows that supplier's history.
+    let lastContact = '';
+    const announce = () => {
+      const contact = readContact();
+      const key = `${contact.contactName ?? ''}|${contact.contactPhone ?? ''}`;
+      if (key === lastContact) return;
+      lastContact = key;
+      const msg: ContactChangedMessage = { type: 'contact-changed', contact };
+      chrome.runtime.sendMessage(msg).catch(() => {});
+    };
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    new MutationObserver(() => {
+      clearTimeout(timer);
+      timer = setTimeout(announce, 400);
+    }).observe(document.body, { childList: true, subtree: true });
+    announce();
 
     async function readImage(src: string) {
       // In the chat bubble WhatsApp shows a reduced image; opening it first gives the full resolution.

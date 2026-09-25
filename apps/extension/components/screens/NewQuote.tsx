@@ -1,7 +1,7 @@
 import { useRef, useState, type DragEvent } from 'react';
 import { ATTACHMENT_TYPES, MAX_ATTACHMENT_BYTES, type Attachment } from '@compras/shared';
 import { blobToDataUrl, newCaptureId, splitDataUrl } from '../../lib/capture';
-import { ErrorBanner, Field, Icon, Screen, useNav } from '../ui';
+import { ErrorBanner, Icon, Screen, useNav } from '../ui';
 
 const ACCEPT = ATTACHMENT_TYPES.join(',');
 const MAX_FILES = 3;
@@ -14,11 +14,9 @@ async function toAttachment(file: File): Promise<Attachment> {
   return { name: file.name, media_type: file.type as Attachment['media_type'], data: parts.data };
 }
 
-/** Alternative to the WhatsApp flow: paste a proposal and/or attach the PDF or image received. */
+/** A PDF or image received from the supplier (downloaded from WhatsApp or from e-mail). */
 export function NewQuote() {
   const nav = useNav();
-  const [text, setText] = useState('');
-  const [contact, setContact] = useState('');
   const [files, setFiles] = useState<Attachment[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
@@ -51,11 +49,11 @@ export function NewQuote() {
       name: 'review',
       capture: {
         id: newCaptureId(),
-        mode: files.length ? 'file' : 'selection',
-        text: text.trim(),
+        mode: 'file',
+        text: '',
         attachments: files,
         conversation: null,
-        contactName: contact.trim() || null,
+        contactName: null,
         contactPhone: null,
         capturedAt: startedAt.current,
         origin: 'manual',
@@ -64,10 +62,10 @@ export function NewQuote() {
 
   return (
     <Screen
-      title="Nova cotação"
+      title="Anexar PDF ou imagem"
       footer={
-        <button type="button" className="btn btn-primary btn-block" disabled={!text.trim() && !files.length} onClick={interpret}>
-          Interpretar
+        <button type="button" className="btn btn-primary btn-block" disabled={!files.length} onClick={interpret}>
+          Ler arquivo
         </button>
       }
     >
@@ -114,12 +112,6 @@ export function NewQuote() {
           ))}
         </div>
       )}
-      <Field id="paste" label="Texto da proposta (opcional com anexo)" hint="Cole a mensagem do fornecedor exatamente como recebida.">
-        <textarea id="paste" className="textarea" style={{ minHeight: 100 }} value={text} onChange={(e) => setText(e.target.value)} maxLength={4000} />
-      </Field>
-      <Field id="contact" label="Fornecedor ou contato (opcional)">
-        <input id="contact" className="input" value={contact} onChange={(e) => setContact(e.target.value)} />
-      </Field>
     </Screen>
   );
 }

@@ -50,3 +50,6 @@
       pendingCapture: { id: String(Date.now()), mode: 'selection', text, conversation: window.__conversation ?? null, contactName, contactPhone, capturedAt: Date.now() },
     });
 })();
+// Simulates switching conversations in WhatsApp Web: __openChat('Carlos (Microsemi)', '+55 11 97000-1234')
+window.__openChat = (contactName = null, contactPhone = null) =>
+  chrome.storage.session.set({ activeContact: { contactName, contactPhone, at: Date.now() } });

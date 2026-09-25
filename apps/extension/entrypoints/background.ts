@@ -6,6 +6,9 @@ import {
   type CaptureMessage,
   type ConversationResponse,
   type ImageResponse,
+  type ActiveContact,
+  type ContactChangedMessage,
+  ACTIVE_CONTACT_KEY,
   CAPTURE_ERROR_KEY,
 } from '../lib/capture';
 
@@ -78,6 +81,13 @@ export default defineBackground(() => {
   });
 
   // Floating "Registrar cotação" button in the conversation.
+  // The conversation open in WhatsApp Web: the side panel shows this supplier's history.
+  chrome.runtime.onMessage.addListener((msg: ContactChangedMessage) => {
+    if (msg?.type !== 'contact-changed') return;
+    const active: ActiveContact = { ...msg.contact, at: Date.now() };
+    chrome.storage.session.set({ [ACTIVE_CONTACT_KEY]: active }).catch(() => {});
+  });
+
   chrome.runtime.onMessage.addListener((msg: CaptureMessage, sender, sendResponse) => {
     if (msg?.type !== 'capture' || !sender.tab?.id) return;
     chrome.sidePanel
