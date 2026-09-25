@@ -167,6 +167,10 @@ export interface SupplierContextDTO {
     last_order: { number: string | null; date: string; total: number } | null;
     recent_orders: { number: string | null; date: string; total: number; items: string }[];
     top_products: { description: string; quantity: number; total: number; last_unit_price: number; last_date: string }[];
+    /** The last 12 months, oldest first, including months without orders. month = "2026-09". */
+    monthly: { month: string; total: number; orders: number }[];
+    /** Unit price paid per order for the top products, oldest first. */
+    price_history: { description: string; points: { date: string; unit_price: number; quantity: number; order: string | null }[] }[];
   };
   quotes: {
     total: number;

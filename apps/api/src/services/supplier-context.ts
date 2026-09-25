@@ -304,6 +304,22 @@ async function buildContext(ctx: AppContext, member: Member, contact: SupplierCo
     }
   }
 
+  const monthly = lastMonths(12).map((month) => {
+    const inMonth = orders.filter((o) => o.createdOn.startsWith(month));
+    return { month, total: Math.round(inMonth.reduce((a, o) => a + o.total, 0) * 100) / 100, orders: inMonth.length };
+  });
+  const topKeys = [...products.entries()].sort((a, b) => b[1].total - a[1].total).slice(0, 3);
+  const priceHistory = topKeys.map(([k, p]) => ({
+    description: p.description,
+    points: orders
+      .flatMap((o) =>
+        o.items
+          .filter((i) => (i.omie_product_id ? String(i.omie_product_id) : i.description.toLowerCase()) === k)
+          .map((i) => ({ date: o.createdOn, unit_price: i.unit_price, quantity: i.quantity, order: o.number })),
+      )
+      .sort((a, b) => a.date.localeCompare(b.date)),
+  }));
+
   const qs = r.supplier
     ? await ctx.db
         .select({ q: quotes, total: sql<number>`coalesce(sum(${quoteItems.quantity} * ${quoteItems.unitPrice}), 0)`.mapWith(Number) })
@@ -352,6 +368,8 @@ async function buildContext(ctx: AppContext, member: Member, contact: SupplierCo
         .sort((a, b) => b.total - a.total)
         .slice(0, 5)
         .map((p) => ({ ...p, total: Math.round(p.total * 100) / 100, quantity: Math.round(p.quantity * 1000) / 1000 })),
+      monthly,
+      price_history: priceHistory,
     },
     quotes: {
       total: qs.length,
@@ -361,4 +379,13 @@ async function buildContext(ctx: AppContext, member: Member, contact: SupplierCo
       recent: qs.slice(0, 3).map(quoteView),
     },
   };
+}
+
+/** ["2025-10", …, "2026-09"]: the last n calendar months, oldest first, ending in the current one. */
+export function lastMonths(n: number, today = todayIso()): string[] {
+  const [y, m] = today.split('-').map(Number) as [number, number];
+  return Array.from({ length: n }, (_, i) => {
+    const d = new Date(Date.UTC(y, m - 1 - (n - 1 - i), 1));
+    return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+  });
 }

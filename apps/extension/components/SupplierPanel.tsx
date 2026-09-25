@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { formatCnpj, formatMoney, isoToBr, QUOTE_STATUS_LABEL, type SupplierContextDTO } from '@compras/shared';
 import { api } from '../lib/api';
 import { ACTIVE_CONTACT_KEY, type ActiveContact, type ContactResponse } from '../lib/capture';
+import { MonthlyBars, PriceHistory } from './charts';
 import { ErrorBanner, Spinner, StatusBadge, useNav } from './ui';
 
 /** Follows the conversation open in WhatsApp Web (the content script reports every switch). */
@@ -127,21 +128,8 @@ export function SupplierPanel() {
             />
           </div>
 
-          {!!ctx.omie.top_products.length && (
-            <div className="stack" style={{ gap: 6 }}>
-              <span className="small muted">Mais comprados (12 meses)</span>
-              {ctx.omie.top_products.slice(0, 3).map((p) => (
-                <div key={p.description} className="row-between small" style={{ alignItems: 'flex-start' }}>
-                  <span style={{ minWidth: 0 }}>{p.description}</span>
-                  <span style={{ whiteSpace: 'nowrap', textAlign: 'right' }}>
-                    <span className="mono">
-                    {formatMoney(p.last_unit_price, 'BRL')}</span>
-                    <span className="muted" style={{ display: 'block', fontFamily: 'inherit' }}>último · {isoToBr(p.last_date)}</span>
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
+          {ctx.omie.orders_12m > 0 && <MonthlyBars data={ctx.omie.monthly} />}
+          {!!ctx.omie.price_history.length && <PriceHistory series={ctx.omie.price_history} />}
 
           {!!ctx.omie.recent_orders.length && (
             <div className="stack" style={{ gap: 6 }}>

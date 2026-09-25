@@ -41,6 +41,13 @@ describe('GET /v1/suppliers/context', () => {
     expect(r.body.omie.last_order).toMatchObject({ number: '1301', total: 11970 });
     expect(r.body.omie.top_products[0]).toMatchObject({ description: 'Fonte chaveada 24V 10A', quantity: 42, total: 25530, last_unit_price: 598.5 });
     expect(r.body.quotes).toMatchObject({ total: 0, ordered: 0, last: null });
+    // Chart series: 12 months, three with orders summing to the 12-month total.
+    expect(r.body.omie.monthly).toHaveLength(12);
+    expect(r.body.omie.monthly.filter((m: any) => m.orders > 0)).toHaveLength(3);
+    expect(r.body.omie.monthly.reduce((a: number, m: any) => a + m.total, 0)).toBe(30180);
+    const fonte = r.body.omie.price_history[0];
+    expect(fonte.description).toBe('Fonte chaveada 24V 10A');
+    expect(fonte.points.map((p: any) => p.unit_price)).toEqual([620, 612, 598.5]);
   });
 
   it('adds quote history once quotes exist, reusing the linked supplier', async () => {
@@ -76,5 +83,16 @@ describe('GET /v1/suppliers/context', () => {
 
   it('requires a name or a phone', async () => {
     expect((await user().get('/v1/suppliers/context')).status).toBe(400);
+  });
+});
+
+describe('chart series', () => {
+  it('lists the last 12 months ending in the current one', async () => {
+    const { lastMonths } = await import('../src/services/supplier-context.js');
+    const months = lastMonths(12, '2026-09-25');
+    expect(months).toHaveLength(12);
+    expect(months[0]).toBe('2025-10');
+    expect(months[11]).toBe('2026-09');
+    expect(lastMonths(3, '2026-01-10')).toEqual(['2025-11', '2025-12', '2026-01']);
   });
 });
