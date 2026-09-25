@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "api",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "-w", "@compras/api"],
+      "port": 8787
+    },
+    {
+      "name": "panel-preview",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["apps/extension/dev/preview-server.mjs"],
+      "port": 5174
+    }
+  ]
+}

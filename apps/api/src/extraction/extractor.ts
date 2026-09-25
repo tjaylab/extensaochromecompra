@@ -1,0 +1,136 @@
+import Anthropic from '@anthropic-ai/sdk';
+import { betaZodOutputFormat } from '@anthropic-ai/sdk/helpers/beta/zod';
+import { ExtractionOutput, parseDecimal } from '@compras/shared';
+import type { Config } from '../config.js';
+import { HttpError } from '../lib/errors.js';
+import { buildUserMessage, EXTRACTION_SYSTEM_PROMPT } from './prompt.js';
+
+export interface ExtractionResult {
+  output: ExtractionOutput;
+  model: string;
+  latencyMs: number;
+  inputTokens: number | null;
+  outputTokens: number | null;
+}
+
+export type Extractor = (input: { text: string; contactName?: string | null; today: string }) => Promise<ExtractionResult>;
+
+export function createExtractor(cfg: Config): Extractor {
+  return cfg.EXTRACTION_MODE === 'mock' ? mockExtractor : claudeExtractor(cfg);
+}
+
+function claudeExtractor(cfg: Config): Extractor {
+  const client = new Anthropic({
+    apiKey: cfg.ANTHROPIC_API_KEY,
+    timeout: 30_000,
+    maxRetries: 2,
+    defaultHeaders: cfg.ANTHROPIC_WORKSPACE_ID ? { 'anthropic-workspace-id': cfg.ANTHROPIC_WORKSPACE_ID } : undefined,
+  });
+  return async (input) => {
+    const started = Date.now();
+    let response;
+    try {
+      response = await client.beta.messages.parse({
+        model: cfg.CLAUDE_MODEL,
+        max_tokens: 8000,
+        thinking: { type: 'adaptive' },
+        output_config: { effort: cfg.CLAUDE_EFFORT, format: betaZodOutputFormat(ExtractionOutput) },
+        // If a safety classifier declines, the API re-runs the request on its recommended fallback model.
+        betas: ['server-side-fallback-2026-07-01'],
+        fallbacks: 'default',
+        system: [{ type: 'text', text: EXTRACTION_SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } }],
+        messages: [{ role: 'user', content: buildUserMessage(input) }],
+      });
+    } catch (err) {
+      if (err instanceof Anthropic.RateLimitError) {
+        throw new HttpError(503, 'extraction_busy', 'Serviço de interpretação ocupado. Tente de novo em alguns segundos.');
+      }
+      if (err instanceof Anthropic.APIConnectionError || err instanceof Anthropic.InternalServerError) {
+        throw new HttpError(503, 'extraction_unavailable', 'Serviço de interpretação indisponível. Tente de novo.');
+      }
+      if (err instanceof Anthropic.AuthenticationError || err instanceof Anthropic.PermissionDeniedError || err instanceof Anthropic.BadRequestError) {
+        // Configuration problem (key, workspace, model): logged by the error handler, shown to the buyer as unavailable.
+        throw Object.assign(new HttpError(503, 'extraction_misconfigured', 'Interpretação automática indisponível no momento. Preencha manualmente.'), { cause: err });
+      }
+      throw err;
+    }
+    if (response.stop_reason === 'refusal') {
+      throw new HttpError(422, 'extraction_refused', 'Não foi possível interpretar esta mensagem. Preencha a cotação manualmente.');
+    }
+    if (response.stop_reason === 'max_tokens' || !response.parsed_output) {
+      throw new HttpError(422, 'extraction_failed', 'A interpretação não terminou. Tente com um trecho menor da conversa.');
+    }
+    return {
+      output: normalizeOutput(response.parsed_output),
+      model: response.model,
+      latencyMs: Date.now() - started,
+      inputTokens: response.usage?.input_tokens ?? null,
+      outputTokens: response.usage?.output_tokens ?? null,
+    };
+  };
+}
+
+/** Defensive cleanup; the schema already guarantees the shape. */
+export function normalizeOutput(o: ExtractionOutput): ExtractionOutput {
+  const clean = (s: string | null) => (s && s.trim() ? s.trim() : null);
+  return {
+    ...o,
+    fornecedor_nome: clean(o.fornecedor_nome),
+    prazo_entrega_texto: clean(o.prazo_entrega_texto),
+    prazo_entrega_data: o.prazo_entrega_data && /^\d{4}-\d{2}-\d{2}$/.test(o.prazo_entrega_data) ? o.prazo_entrega_data : null,
+    prazo_entrega_dias: o.prazo_entrega_dias != null && o.prazo_entrega_dias >= 0 ? Math.round(o.prazo_entrega_dias) : null,
+    condicao_pagamento: clean(o.condicao_pagamento),
+    validade_proposta: clean(o.validade_proposta),
+    itens: o.itens
+      .filter((i) => i.descricao && i.descricao.trim())
+      .map((i) => ({ ...i, descricao: i.descricao.trim(), marca: clean(i.marca), sku: clean(i.sku), unidade: clean(i.unidade) })),
+  };
+}
+
+/**
+ * Local stand-in used when no Anthropic key is configured (development and tests).
+ * Handles simple one-item messages like "Consigo 30 fontes Microsemi por USD 111,46 cada. Prazo de 45 dias. Pagamento 28 dias."
+ */
+export const mockExtractor: Extractor = async ({ text }) => {
+  const started = Date.now();
+  const t = text.replace(/\s+/g, ' ');
+  const currency = /US\$|USD|d[óo]lar/i.test(t) ? 'USD' : /€|EUR|euro/i.test(t) ? 'EUR' : /R\$|reais/i.test(t) ? 'BRL' : null;
+  const price = t.match(/(?:por|a|R\$|US\$|USD|EUR|€)\s*(?:R\$|US\$|USD|EUR|€)?\s*([\d.,]+\d)\s*(?:cada|a unidade|\/un|por unidade)?/i);
+  const qty = t.match(/(\d+[\d.]*)\s+(un(?:idades?)?\s+(?:de\s+)?)?([a-zà-ú][\w\sà-ú-]*?)\s+(?:por|a)\s/i);
+  const prazo = t.match(/prazo(?: de entrega)?(?: de)?\s*:?\s*(\d+)\s*dias/i);
+  const pagamento = t.match(/pagamento\s*:?\s*([^.;]+)/i);
+  const frete = /frete incluso|cif/i.test(t) ? 'CIF' : /fob|frete por (sua|conta)/i.test(t) ? 'FOB' : null;
+  const desc = qty?.[3]?.trim();
+  const items = desc
+    ? [
+        {
+          descricao: desc.charAt(0).toUpperCase() + desc.slice(1).replace(/s(\s|$)/, '$1'),
+          marca: desc.split(' ').length > 1 ? desc.split(' ').slice(1).join(' ') : null,
+          sku: null,
+          quantidade: parseDecimal(qty![1]),
+          unidade: 'un',
+          valor_unitario: price ? parseDecimal(price[1]) : null,
+          valor_total: null,
+        },
+      ]
+    : [];
+  return {
+    output: {
+      fornecedor_nome: null,
+      moeda: currency,
+      prazo_entrega_dias: prazo ? Number(prazo[1]) : null,
+      prazo_entrega_data: null,
+      prazo_entrega_texto: prazo ? `${prazo[1]} dias` : null,
+      condicao_pagamento: pagamento ? pagamento[1].trim() : null,
+      frete_tipo: frete,
+      frete_valor: null,
+      validade_proposta: null,
+      itens: items,
+      campos_ambiguos: [],
+    },
+    model: 'mock',
+    latencyMs: Date.now() - started,
+    inputTokens: null,
+    outputTokens: null,
+  };
+};

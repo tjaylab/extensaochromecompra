@@ -1,0 +1,27 @@
+{
+  "name": "@compras/extension",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wxt",
+    "build": "wxt build",
+    "zip": "wxt zip",
+    "typecheck": "tsc --noEmit",
+    "prepare": "wxt prepare"
+  },
+  "dependencies": {
+    "@compras/shared": "^0.1.0",
+    "@supabase/supabase-js": "^2.117.2",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.3.0",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@wxt-dev/module-react": "^1.2.2",
+    "typescript": "^7.0.2",
+    "wxt": "^0.21.4"
+  }
+}

@@ -1,0 +1,6 @@
+node_modules
+**/node_modules
+**/.env
+**/.data
+apps/extension/**
+!apps/extension/package.json

@@ -1,0 +1,17 @@
+{
+  "name": "compras-whatsapp",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "dev:api": "npm run dev -w @compras/api",
+    "dev:ext": "npm run dev -w @compras/extension",
+    "build:ext": "npm run build -w @compras/extension",
+    "test": "npm test -w @compras/api",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "preview:panel": "npm run build -w @compras/extension && node apps/extension/dev/preview-server.mjs"
+  }
+}
