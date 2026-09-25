@@ -6,7 +6,7 @@ import { MonthlyBars, PriceHistory } from './charts';
 import { Collapsible, ErrorBanner, Spinner, StatusBadge, useNav } from './ui';
 
 /** Follows the conversation open in WhatsApp Web (the content script reports every switch). */
-function useActiveContact(): ContactResponse | null {
+export function useActiveContact(): ContactResponse | null {
   const [contact, setContact] = useState<ContactResponse | null>(null);
   useEffect(() => {
     const apply = (c: ActiveContact | undefined) => setContact(c && (c.contactName || c.contactPhone) ? { contactName: c.contactName, contactPhone: c.contactPhone } : null);

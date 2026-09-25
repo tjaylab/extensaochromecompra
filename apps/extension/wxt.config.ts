@@ -10,6 +10,8 @@ export default defineConfig({
     permissions: ['sidePanel', 'contextMenus', 'storage'],
     host_permissions: ['https://web.whatsapp.com/*'],
     action: { default_title: 'ProcureMate' },
+    // The floating window over WhatsApp Web loads the app page in an iframe.
+    web_accessible_resources: [{ resources: ['sidepanel.html', 'chunks/*', 'assets/*'], matches: ['https://web.whatsapp.com/*'] }],
   },
   webExt: {
     startUrls: ['https://web.whatsapp.com/'],

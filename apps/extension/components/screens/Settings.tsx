@@ -206,9 +206,9 @@ function AutoReadSetting() {
       <label className="row" style={{ alignItems: 'flex-start', gap: 10, cursor: 'pointer' }}>
         <input type="checkbox" checked={on} onChange={(e) => toggle(e.target.checked)} style={{ width: 18, height: 18, marginTop: 2 }} />
         <span className="stack" style={{ gap: 2 }}>
-          <span>Ler imagens e PDFs recebidos de fornecedores</span>
+          <span>Ler propostas automaticamente</span>
           <span className="small muted">
-            Quando chega uma imagem ou você baixa um PDF numa conversa com fornecedor reconhecido, a IA procura a cotação sozinha. Em outras conversas, só lê se você pedir.
+            Ao abrir a conversa com um fornecedor reconhecido, e quando chega mensagem com preço, imagem ou PDF baixado, a IA lê sozinha e deixa a cotação pronta para salvar. Em outras conversas, só lê se você pedir.
           </span>
         </span>
       </label>

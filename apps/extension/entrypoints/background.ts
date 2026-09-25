@@ -13,6 +13,7 @@ import {
   SUGGESTION_KEY,
   ACTIVE_CONTACT_KEY,
   CAPTURE_ERROR_KEY,
+  type LauncherCommand,
 } from '../lib/capture';
 import { historyHours } from '../lib/whatsapp-tab';
 
@@ -22,8 +23,16 @@ const MENU_IMAGE = 'registrar-imagem';
 const WHATSAPP = ['https://web.whatsapp.com/*'];
 
 export default defineBackground(() => {
-  // The toolbar icon opens the side panel.
-  chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(() => {});
+  // Toolbar icon: on WhatsApp Web it opens/minimizes the floating window; elsewhere it opens the side panel.
+  chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: false }).catch(() => {});
+  chrome.action.onClicked.addListener((tab) => {
+    if (!tab.id) return;
+    if (tab.url?.startsWith('https://web.whatsapp.com/')) {
+      openWindow(tab.id, 'toggle');
+      return;
+    }
+    chrome.sidePanel.open({ tabId: tab.id }).catch(() => {});
+  });
 
   chrome.runtime.onInstalled.addListener(() => {
     chrome.contextMenus.create({ id: MENU_SELECTION, title: 'Registrar cotação', contexts: ['selection'], documentUrlPatterns: WHATSAPP });
@@ -35,7 +44,7 @@ export default defineBackground(() => {
   chrome.contextMenus.onClicked.addListener((info, tab) => {
     if (info.menuItemId !== MENU_IMAGE || !tab?.id || !info.srcUrl) return;
     const tabId = tab.id;
-    chrome.sidePanel.open({ tabId }).catch(() => {});
+    openWindow(tabId);
     const capturedAt = Date.now();
     chrome.tabs
       .sendMessage<{ type: 'get-image'; src: string }, ImageResponse>(tabId, { type: 'get-image', src: info.srcUrl })
@@ -66,8 +75,7 @@ export default defineBackground(() => {
     if (!isSelection && info.menuItemId !== MENU_CONVERSATION) return;
     if (isSelection && !info.selectionText) return;
     const tabId = tab.id;
-    // Open first: sidePanel.open must run while the user gesture is still active.
-    chrome.sidePanel.open({ tabId }).catch(() => {});
+    openWindow(tabId);
     const capturedAt = Date.now();
     // The whole-conversation option reads the configured period (scrolling up); a selection only needs recent context.
     (isSelection ? Promise.resolve(undefined) : historyHours())
@@ -110,14 +118,17 @@ export default defineBackground(() => {
   // Floating "Registrar cotação" button in the conversation.
   chrome.runtime.onMessage.addListener((msg: CaptureMessage, sender, sendResponse) => {
     if (msg?.type !== 'capture' || !sender.tab?.id) return;
-    chrome.sidePanel
-      .open({ tabId: sender.tab.id })
-      .then(() => sendResponse({ opened: true }))
-      .catch(() => sendResponse({ opened: false }));
+    openWindow(sender.tab.id);
     storeCapture(msg.capture);
-    return true; // async sendResponse
+    sendResponse({ opened: true });
   });
 });
+
+/** Opens (or toggles) ProcureMate's floating window on the WhatsApp Web tab. */
+function openWindow(tabId: number, action: LauncherCommand['action'] = 'open') {
+  const cmd: LauncherCommand = { type: 'launcher', action };
+  chrome.tabs.sendMessage(tabId, cmd).catch(() => {});
+}
 
 async function storeCapture(c: Omit<Capture, 'id'>) {
   const capture: Capture = { id: newCaptureId(), ...c, text: c.text.trim().slice(0, 4000) };

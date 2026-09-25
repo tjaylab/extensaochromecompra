@@ -1,7 +1,7 @@
 import { useEffect, useState, type KeyboardEvent } from 'react';
 import { api } from '../../lib/api';
 import { captureOpenConversation } from '../../lib/whatsapp-tab';
-import { SuggestionBanner } from '../SuggestionBanner';
+import { AutoProposal } from '../AutoProposal';
 import { SupplierPanel } from '../SupplierPanel';
 import { ErrorBanner, Icon, Screen, useLoad, useNav, useSession } from '../ui';
 
@@ -54,7 +54,7 @@ export function Menu({ error }: { error?: string }) {
         </nav>
       }
     >
-      <SuggestionBanner />
+      <AutoProposal />
       <div id={`panel-${tab}`} role="tabpanel" aria-labelledby={`tab-${tab}`} className="stack" style={{ gap: 16 }}>
         {tab === 'insights' ? <SupplierPanel /> : <Work error={error} />}
       </div>

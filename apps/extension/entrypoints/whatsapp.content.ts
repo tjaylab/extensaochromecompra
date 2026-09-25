@@ -98,7 +98,8 @@ export default defineContentScript({
           }
           // Load the last N hours (scrolling up if needed), then read them.
           const since = Date.now() - msg.hours * 3600_000;
-          loadHistory(since)
+          // Automatic reads never move the buyer's view: they use what is already loaded.
+          (msg.scroll === false ? Promise.resolve(false) : loadHistory(since))
             .catch(() => false)
             .then(() => sendResponse({ ...readContact(), conversation: readConversation(undefined, HISTORY_LIMITS, since) }));
           return true; // async sendResponse

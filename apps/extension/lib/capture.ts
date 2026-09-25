@@ -24,7 +24,8 @@ export interface Capture {
 export type CaptureMessage = { type: 'capture'; capture: Omit<Capture, 'id'> };
 export type ContactRequest = { type: 'get-contact' };
 export type ContactResponse = { contactName: string | null; contactPhone: string | null };
-export type ConversationRequest = { type: 'get-conversation'; hours?: number };
+/** hours: period to read; scroll: load older messages by scrolling up (manual reads) or only use what is on screen. */
+export type ConversationRequest = { type: 'get-conversation'; hours?: number; scroll?: boolean };
 export type ConversationResponse = ContactResponse & { conversation: ConversationMessage[] };
 export type ImageRequest = { type: 'get-image'; src: string };
 export type ImageResponse = ConversationResponse & { image: Attachment | null; error?: string };
@@ -81,4 +82,20 @@ export const CAPTURE_ERROR_KEY = 'captureError';
 
 export function newCaptureId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+// ---------------------------------------------------------------------------
+// Floating window over WhatsApp Web (entrypoints/launcher.content.ts)
+// ---------------------------------------------------------------------------
+
+/** chrome.storage.local: whether the floating window was left open. */
+export const LAUNCHER_OPEN_KEY = 'launcherOpen';
+/** Tag of the messages the app (inside the floating window's iframe) sends to the WhatsApp page. */
+export const PANEL_MESSAGE = '__procuremate_panel__';
+export type LauncherCommand = { type: 'launcher'; action: 'open' | 'close' | 'toggle' };
+
+/** Inside the floating window: ask the icon for attention (dot + note) while minimized. */
+export function requestAttention(text: string) {
+  if (window.parent === window) return; // Chrome side panel: nothing to do
+  window.parent.postMessage({ source: PANEL_MESSAGE, type: 'attention', text }, 'https://web.whatsapp.com');
 }

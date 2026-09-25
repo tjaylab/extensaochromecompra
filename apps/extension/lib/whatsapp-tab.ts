@@ -8,7 +8,7 @@ export async function historyHours(): Promise<number> {
 }
 
 /** Reads the conversation open in the WhatsApp Web tab (the side panel's "Registrar da conversa aberta"). */
-export async function captureOpenConversation(): Promise<Capture> {
+export async function captureOpenConversation(opts: { scroll?: boolean } = {}): Promise<Capture> {
   const capturedAt = Date.now();
   if (!chrome.tabs?.query) throw new Error('Abra o WhatsApp Web nesta janela do Chrome.');
   const tabs = await chrome.tabs.query({ url: 'https://web.whatsapp.com/*' });
@@ -17,7 +17,11 @@ export async function captureOpenConversation(): Promise<Capture> {
   const hours = await historyHours();
   let r: ConversationResponse | undefined;
   try {
-    r = await chrome.tabs.sendMessage<{ type: 'get-conversation'; hours: number }, ConversationResponse>(tab.id, { type: 'get-conversation', hours });
+    r = await chrome.tabs.sendMessage<{ type: 'get-conversation'; hours: number; scroll?: boolean }, ConversationResponse>(tab.id, {
+      type: 'get-conversation',
+      hours,
+      scroll: opts.scroll,
+    });
   } catch {
     throw new Error('Recarregue a aba do WhatsApp Web (a extensão foi instalada ou atualizada depois que ela abriu).');
   }

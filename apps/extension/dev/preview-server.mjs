@@ -18,6 +18,11 @@ createServer(async (req, res) => {
       res.writeHead(200, { 'Content-Type': 'text/javascript' });
       return res.end(await readFile(path.join(here, 'chrome-shim.js')));
     }
+    // A stand-in WhatsApp Web page with the floating ProcureMate icon (launcher content script).
+    if (url.pathname === '/whatsapp.html') {
+      res.writeHead(200, { 'Content-Type': 'text/html' });
+      return res.end('<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>WhatsApp (simulado)</title><script src="/chrome-shim.js"></script></head><body style="margin:0;font-family:system-ui;background:#efeae2"><div id="main" style="height:100vh;padding:24px"><header><span dir="auto" title="Carlos (Microsemi)">Carlos (Microsemi)</span></header><p>Conversa simulada</p></div><script src="/content-scripts/launcher.js"></script></body></html>');
+    }
     const rel = url.pathname === '/' ? 'sidepanel.html' : url.pathname.slice(1);
     const file = path.resolve(root, rel);
     if (!file.startsWith(root)) throw new Error('outside root');

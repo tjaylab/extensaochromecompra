@@ -37,7 +37,7 @@
       onChanged: { addListener: (l) => listeners.push(l), removeListener: (l) => listeners.splice(listeners.indexOf(l), 1) },
     },
     action: { setBadgeText: async () => {}, setBadgeBackgroundColor: async () => {} },
-    runtime: { sendMessage: async () => {}, onMessage: { addListener() {} } },
+    runtime: { id: 'dev', getURL: (p) => location.origin + (p.startsWith('/') ? p : '/' + p), sendMessage: async () => {}, onMessage: { addListener() {} } },
     // Simulates an open WhatsApp tab: set window.__conversation = [{ direction, author, time, text }, …]
     tabs: {
       query: async () => (window.__conversation ? [{ id: 1, active: true }] : []),
