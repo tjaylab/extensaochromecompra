@@ -1,8 +1,17 @@
 import { defineBackground } from 'wxt/utils/define-background';
-import { newCaptureId, PENDING_CAPTURE_KEY, type Capture, type CaptureMessage, type ConversationResponse } from '../lib/capture';
+import {
+  newCaptureId,
+  PENDING_CAPTURE_KEY,
+  type Capture,
+  type CaptureMessage,
+  type ConversationResponse,
+  type ImageResponse,
+  CAPTURE_ERROR_KEY,
+} from '../lib/capture';
 
 const MENU_SELECTION = 'registrar-cotacao';
 const MENU_CONVERSATION = 'registrar-conversa';
+const MENU_IMAGE = 'registrar-imagem';
 const WHATSAPP = ['https://web.whatsapp.com/*'];
 
 export default defineBackground(() => {
@@ -12,6 +21,35 @@ export default defineBackground(() => {
   chrome.runtime.onInstalled.addListener(() => {
     chrome.contextMenus.create({ id: MENU_SELECTION, title: 'Registrar cotação', contexts: ['selection'], documentUrlPatterns: WHATSAPP });
     chrome.contextMenus.create({ id: MENU_CONVERSATION, title: 'Registrar cotação da conversa', contexts: ['page'], documentUrlPatterns: WHATSAPP });
+    chrome.contextMenus.create({ id: MENU_IMAGE, title: 'Registrar cotação desta imagem', contexts: ['image'], documentUrlPatterns: WHATSAPP });
+  });
+
+  // Right-click on an image in the conversation.
+  chrome.contextMenus.onClicked.addListener((info, tab) => {
+    if (info.menuItemId !== MENU_IMAGE || !tab?.id || !info.srcUrl) return;
+    const tabId = tab.id;
+    chrome.sidePanel.open({ tabId }).catch(() => {});
+    const capturedAt = Date.now();
+    chrome.tabs
+      .sendMessage<{ type: 'get-image'; src: string }, ImageResponse>(tabId, { type: 'get-image', src: info.srcUrl })
+      .catch(() => null)
+      .then(async (r) => {
+        if (!r?.image) {
+          await chrome.storage.session.set({
+            [CAPTURE_ERROR_KEY]: `Não consegui ler a imagem${r?.error ? ` (${r.error})` : ''}. Baixe a imagem e anexe em "Colar texto ou anexar arquivo".`,
+          });
+          return;
+        }
+        await storeCapture({
+          mode: 'file',
+          text: '',
+          attachments: [r.image],
+          conversation: r.conversation,
+          contactName: r.contactName,
+          contactPhone: r.contactPhone,
+          capturedAt,
+        });
+      });
   });
 
   // Right-click > "Registrar cotação" (selection) or "Registrar cotação da conversa" (anywhere on the page).

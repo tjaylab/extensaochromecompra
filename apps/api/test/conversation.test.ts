@@ -57,7 +57,7 @@ describe('POST /v1/extractions with a conversation', () => {
   it('requires a selection or a conversation', async () => {
     const r = await user().post('/v1/extractions', { text: '', conversation: [] });
     expect(r.status).toBe(400);
-    expect(r.body.error.message).toBe('Selecione uma mensagem ou abra uma conversa');
+    expect(r.body.error.message).toBe('Selecione uma mensagem, abra uma conversa ou anexe um arquivo');
   });
 
   it('rejects conversations that are too long', async () => {

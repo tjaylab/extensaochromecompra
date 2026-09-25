@@ -3,14 +3,14 @@ import { api } from '../../lib/api';
 import { captureOpenConversation } from '../../lib/whatsapp-tab';
 import { ErrorBanner, Icon, Screen, useLoad, useNav, useSession } from '../ui';
 
-export function Menu() {
+export function Menu({ error }: { error?: string }) {
   const nav = useNav();
   const { me } = useSession();
   const counts = useLoad(async () => {
     const [quotes, reqs, orders] = await Promise.all([api.quotes(), api.requisitions('open'), api.orders()]);
     return { quotes: quotes.length, reqs: reqs.length, orders: orders.length };
   });
-  const [readError, setReadError] = useState<string | null>(null);
+  const [readError, setReadError] = useState<string | null>(error ?? null);
   const [reading, setReading] = useState(false);
 
   const fromConversation = async () => {
@@ -53,7 +53,7 @@ export function Menu() {
           <Icon name="plus" size={20} /> {reading ? 'Lendo a conversa…' : 'Registrar da conversa aberta'}
         </button>
         <button type="button" className="btn btn-secondary btn-lg" onClick={() => nav.go({ name: 'new' })}>
-          Colar texto da proposta
+          Colar texto ou anexar PDF/imagem
         </button>
         <button type="button" className="btn btn-secondary btn-lg" onClick={() => nav.go({ name: 'quotes' })}>
           Minhas cotações <span className="count">{counts.data?.quotes ?? ''}</span>

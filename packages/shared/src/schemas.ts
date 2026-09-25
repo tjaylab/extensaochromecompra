@@ -38,6 +38,10 @@ export const ExtractionOutput = z.object({
   mensagens_usadas: z
     .array(z.number())
     .describe('Números [n] das mensagens da conversa de onde saiu a proposta vigente; vazio quando não houver conversa'),
+  trecho_documento: z
+    .string()
+    .nullable()
+    .describe('Com anexo (PDF ou imagem): as linhas da proposta transcritas como estão no documento; sem anexo, null'),
 });
 export type ExtractionOutput = z.infer<typeof ExtractionOutput>;
 
@@ -52,16 +56,33 @@ export type ConversationMessage = z.infer<typeof ConversationMessage>;
 
 export const MAX_CONVERSATION_CHARS = 16_000;
 
+export const ATTACHMENT_TYPES = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp', 'image/gif'] as const;
+export const MAX_ATTACHMENT_BYTES = 8 * 1024 * 1024;
+
+/** A PDF or image with the proposal, base64 without the data: prefix. */
+export const Attachment = z.object({
+  name: z.string().max(200).nullish(),
+  media_type: z.enum(ATTACHMENT_TYPES, { message: 'Formato não suportado: use PDF, JPG, PNG ou WEBP' }),
+  data: z
+    .string()
+    .min(1)
+    .refine((b) => Math.floor((b.length * 3) / 4) <= MAX_ATTACHMENT_BYTES, { message: 'Arquivo maior que 8 MB' }),
+});
+export type Attachment = z.infer<typeof Attachment>;
+
 export const ExtractionRequest = z
   .object({
-    /** The buyer's selection. Optional when a conversation is sent. */
+    /** The buyer's selection. Optional when a conversation or an attachment is sent. */
     text: z.string().trim().max(4000).default(''),
     /** Recent messages of the open conversation, oldest first. */
     conversation: z.array(ConversationMessage).max(80).nullish(),
+    attachments: z.array(Attachment).max(3, 'Envie no máximo 3 arquivos por cotação').nullish(),
     contact_name: z.string().max(200).nullish(),
     contact_phone: z.string().max(40).nullish(),
   })
-  .refine((d) => d.text.length > 0 || (d.conversation?.length ?? 0) > 0, { message: 'Selecione uma mensagem ou abra uma conversa' })
+  .refine((d) => d.text.length > 0 || (d.conversation?.length ?? 0) > 0 || (d.attachments?.length ?? 0) > 0, {
+    message: 'Selecione uma mensagem, abra uma conversa ou anexe um arquivo',
+  })
   .refine((d) => (d.conversation ?? []).reduce((a, m) => a + m.text.length, 0) <= MAX_CONVERSATION_CHARS, {
     message: 'Conversa longa demais: selecione o trecho da proposta',
   });

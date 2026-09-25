@@ -7,7 +7,7 @@ import type { Capture } from '../lib/capture';
 // ---------------------------------------------------------------------------
 
 export type Route =
-  | { name: 'menu' }
+  | { name: 'menu'; error?: string }
   | { name: 'new' }
   | { name: 'review'; capture: Capture & { origin: 'whatsapp' | 'manual' } }
   | { name: 'quotes'; flash?: string }

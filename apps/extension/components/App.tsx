@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { MeDTO } from '@compras/shared';
 import { ApiError, api } from '../lib/api';
 import { getToken, signOut } from '../lib/auth';
-import { PENDING_CAPTURE_KEY, type Capture } from '../lib/capture';
+import { CAPTURE_ERROR_KEY, PENDING_CAPTURE_KEY, type Capture } from '../lib/capture';
 import { Login, Onboarding } from './screens/Auth';
 import { Compare } from './screens/Compare';
 import { Menu } from './screens/Menu';
@@ -46,9 +46,19 @@ export function App() {
       chrome.action.setBadgeText({ text: '' });
       setStack([{ name: 'menu' }, { name: 'review', capture: { ...capture, origin: 'whatsapp' } }]);
     };
-    chrome.storage.session.get(PENDING_CAPTURE_KEY).then((r) => consume(r[PENDING_CAPTURE_KEY] as Capture | undefined));
+    const fail = (error: string | undefined) => {
+      if (!error) return;
+      chrome.storage.session.remove(CAPTURE_ERROR_KEY);
+      setStack([{ name: 'menu', error }]);
+    };
+    chrome.storage.session.get([PENDING_CAPTURE_KEY, CAPTURE_ERROR_KEY]).then((r) => {
+      consume(r[PENDING_CAPTURE_KEY] as Capture | undefined);
+      fail(r[CAPTURE_ERROR_KEY] as string | undefined);
+    });
     const onChange = (changes: Record<string, chrome.storage.StorageChange>, area: string) => {
-      if (area === 'session' && changes[PENDING_CAPTURE_KEY]?.newValue) consume(changes[PENDING_CAPTURE_KEY].newValue as Capture);
+      if (area !== 'session') return;
+      if (changes[PENDING_CAPTURE_KEY]?.newValue) consume(changes[PENDING_CAPTURE_KEY].newValue as Capture);
+      if (changes[CAPTURE_ERROR_KEY]?.newValue) fail(changes[CAPTURE_ERROR_KEY].newValue as string);
     };
     chrome.storage.onChanged.addListener(onChange);
     return () => chrome.storage.onChanged.removeListener(onChange);
@@ -85,7 +95,7 @@ export function App() {
   return (
     <SessionContext.Provider value={session}>
       <NavContext.Provider value={nav}>
-        {r.name === 'menu' && <Menu />}
+        {r.name === 'menu' && <Menu key={r.error ?? 'menu'} error={r.error} />}
         {r.name === 'new' && <NewQuote />}
         {r.name === 'review' && <Review key={r.capture.id} capture={r.capture} />}
         {r.name === 'quotes' && <Quotes flash={r.flash} />}

@@ -11,6 +11,7 @@ import {
   type ExtractionResponse,
   type RequisitionDTO,
   type SupplierDTO,
+  type Attachment,
 } from '@compras/shared';
 import { api } from '../../lib/api';
 import type { Capture } from '../../lib/capture';
@@ -45,6 +46,9 @@ interface Form {
 }
 
 const num = (n: number | null | undefined) => (n == null ? '' : String(n).replace('.', ','));
+// Prices with two decimals ("589,90"), no thousands separator so the field stays easy to edit.
+const money = (n: number | null | undefined) =>
+  n == null ? '' : n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 4, useGrouping: false });
 const blankItem = (): ItemForm => ({ description: '', brand: '', sku: '', quantity: '', unit: 'un', unit_price: '' });
 const missing = (v: string) => (v.trim() ? 'input' : 'input missing');
 
@@ -68,7 +72,7 @@ function formFromExtraction(ex: ExtractionResponse | null, capture: Capture): Fo
     delivery_text: d?.prazo_entrega_texto ?? '',
     payment_terms_text: d?.condicao_pagamento ?? '',
     freight_type: d?.frete_tipo ?? '',
-    freight_value: num(d?.frete_valor),
+    freight_value: money(d?.frete_valor),
     validity_text: d?.validade_proposta ?? '',
     quote_date: isoToBr(todayIso()),
     requisition_id: '',
@@ -81,7 +85,7 @@ function formFromExtraction(ex: ExtractionResponse | null, capture: Capture): Fo
           quantity: num(i.quantidade),
           unit: i.unidade ?? 'un',
           // Only a total was given: leave the unit price for the buyer, with the total as a hint.
-          unit_price: num(i.valor_unitario ?? (i.valor_total != null && i.quantidade ? i.valor_total / i.quantidade : null)),
+          unit_price: money(i.valor_unitario ?? (i.valor_total != null && i.quantidade ? i.valor_total / i.quantidade : null)),
         }))
       : [blankItem()],
   };
@@ -104,7 +108,13 @@ export function Review({ capture }: { capture: Capture & { origin: 'whatsapp' | 
     setPhase('extracting');
     setExtractError(null);
     api
-      .extract({ text: capture.text, conversation: capture.conversation, contact_name: capture.contactName, contact_phone: capture.contactPhone })
+      .extract({
+        text: capture.text,
+        conversation: capture.conversation,
+        attachments: capture.attachments,
+        contact_name: capture.contactName,
+        contact_phone: capture.contactPhone,
+      })
       .then((r) => {
         setEx(r);
         setForm(formFromExtraction(r, capture));
@@ -138,9 +148,13 @@ export function Review({ capture }: { capture: Capture & { origin: 'whatsapp' | 
   const total = totals.reduce<number>((a, t) => a + (t ?? 0), 0);
   const elapsed = Math.max(0, Math.floor((now - capture.capturedAt) / 1000));
   // What the quote preserves: the API's excerpt (selection or the messages used), else what was captured.
+  const files = capture.attachments ?? [];
   const sourceText =
-    ex?.source_text || capture.text || (capture.conversation?.length ? formatConversation(capture.conversation) : '');
-  const noProposal = phase === 'form' && capture.mode === 'conversation' && ex && ex.data.itens.length === 0;
+    ex?.source_text ||
+    [files.map((f) => `Arquivo: ${f.name ?? f.media_type}`).join('\n'), capture.text, capture.conversation?.length ? formatConversation(capture.conversation) : '']
+      .filter(Boolean)
+      .join('\n\n');
+  const noProposal = phase === 'form' && capture.mode !== 'selection' && ex && ex.data.itens.length === 0;
   const timer = `${String(Math.floor(elapsed / 60)).padStart(2, '0')}:${String(elapsed % 60).padStart(2, '0')}`;
 
   const missingCount = useMemo(() => {
@@ -220,7 +234,16 @@ export function Review({ capture }: { capture: Capture & { origin: 'whatsapp' | 
   if (phase === 'extracting') {
     return (
       <Screen title="Registrar cotação">
-        <Spinner label={capture.mode === 'conversation' ? `Lendo ${capture.conversation?.length ?? 0} mensagens da conversa…` : 'Interpretando a mensagem…'} />
+        <Spinner
+          label={
+            capture.mode === 'file'
+              ? `Lendo ${files.length > 1 ? `${files.length} arquivos` : files[0]?.media_type === 'application/pdf' ? 'o PDF' : 'a imagem'}… pode levar até 30 s`
+              : capture.mode === 'conversation'
+                ? `Lendo ${capture.conversation?.length ?? 0} mensagens da conversa…`
+                : 'Interpretando a mensagem…'
+          }
+        />
+        <AttachmentList files={files} />
         <div className="source">{capture.text || formatConversation(capture.conversation ?? []).split('\n').slice(-4).join('\n')}</div>
         <div className="stack">
           {[60, 45, 52].map((w) => (
@@ -276,8 +299,13 @@ export function Review({ capture }: { capture: Capture & { origin: 'whatsapp' | 
 
       <div className="stack">
         <span className="section-label">
-          {capture.mode === 'conversation' ? 'Mensagens usadas · WhatsApp' : `Texto original · ${capture.origin === 'whatsapp' ? 'WhatsApp' : 'colado'}`}
+          {capture.mode === 'file'
+            ? 'Arquivo e trecho usados'
+            : capture.mode === 'conversation'
+              ? 'Mensagens usadas · WhatsApp'
+              : `Texto original · ${capture.origin === 'whatsapp' ? 'WhatsApp' : 'colado'}`}
         </span>
+        <AttachmentList files={files} />
         <div className="source">{sourceText}</div>
         {!!capture.conversation?.length && (
           <details>
@@ -422,5 +450,28 @@ export function Review({ capture }: { capture: Capture & { origin: 'whatsapp' | 
         )}
       </section>
     </Screen>
+  );
+}
+
+function AttachmentList({ files }: { files: Attachment[] }) {
+  if (!files.length) return null;
+  return (
+    <div className="stack">
+      {files.map((f, i) =>
+        f.media_type === 'application/pdf' ? (
+          <div key={i} className="row card" style={{ padding: '10px 12px' }}>
+            <span className="badge badge-info">PDF</span>
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.name ?? 'documento.pdf'}</span>
+          </div>
+        ) : (
+          <img
+            key={i}
+            src={`data:${f.media_type};base64,${f.data}`}
+            alt={f.name ? `Anexo ${f.name}` : 'Imagem anexada'}
+            style={{ maxWidth: '100%', maxHeight: 220, objectFit: 'contain', borderRadius: 10, border: '1px solid var(--line)', background: '#fff' }}
+          />
+        ),
+      )}
+    </div>
   );
 }

@@ -1,6 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { betaZodOutputFormat } from '@anthropic-ai/sdk/helpers/beta/zod';
-import { ExtractionOutput, parseDecimal, type ConversationMessage } from '@compras/shared';
+import { ExtractionOutput, parseDecimal, type Attachment, type ConversationMessage } from '@compras/shared';
 import type { Config } from '../config.js';
 import { HttpError } from '../lib/errors.js';
 import { buildUserMessage, EXTRACTION_SYSTEM_PROMPT } from './prompt.js';
@@ -17,6 +17,8 @@ export interface ExtractionInput {
   /** The buyer's selection ('' when capturing the whole conversation). */
   text: string;
   conversation?: ConversationMessage[] | null;
+  /** PDFs and images with the proposal. */
+  attachments?: Attachment[] | null;
   contactName?: string | null;
   today: string;
 }
@@ -36,19 +38,33 @@ function claudeExtractor(cfg: Config): Extractor {
   });
   return async (input) => {
     const started = Date.now();
+    const files = input.attachments ?? [];
+    // Files go before the text so the instructions about them read in order.
+    const content: Anthropic.Beta.BetaContentBlockParam[] = [
+      ...files.map((f): Anthropic.Beta.BetaContentBlockParam =>
+        f.media_type === 'application/pdf'
+          ? { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: f.data }, title: f.name ?? undefined }
+          : { type: 'image', source: { type: 'base64', media_type: f.media_type, data: f.data } },
+      ),
+      { type: 'text', text: buildUserMessage(input) },
+    ];
     let response;
     try {
-      response = await client.beta.messages.parse({
+      response = await client.beta.messages.parse(
+        {
         model: cfg.CLAUDE_MODEL,
-        max_tokens: 8000,
+        // Price lists in PDFs can carry dozens of items.
+        max_tokens: files.length ? 16000 : 8000,
         thinking: { type: 'adaptive' },
         output_config: { effort: cfg.CLAUDE_EFFORT, format: betaZodOutputFormat(ExtractionOutput) },
         // If a safety classifier declines, the API re-runs the request on its recommended fallback model.
         betas: ['server-side-fallback-2026-07-01'],
         fallbacks: 'default',
         system: [{ type: 'text', text: EXTRACTION_SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } }],
-        messages: [{ role: 'user', content: buildUserMessage(input) }],
-      });
+        messages: [{ role: 'user', content }],
+        },
+        { timeout: files.length ? 90_000 : 30_000 },
+      );
     } catch (err) {
       if (err instanceof Anthropic.RateLimitError) {
         throw new HttpError(503, 'extraction_busy', 'Serviço de interpretação ocupado. Tente de novo em alguns segundos.');
@@ -89,6 +105,7 @@ export function normalizeOutput(o: ExtractionOutput): ExtractionOutput {
     prazo_entrega_dias: o.prazo_entrega_dias != null && o.prazo_entrega_dias >= 0 ? Math.round(o.prazo_entrega_dias) : null,
     condicao_pagamento: clean(o.condicao_pagamento),
     validade_proposta: clean(o.validade_proposta),
+    trecho_documento: clean(o.trecho_documento),
     mensagens_usadas: [...new Set(o.mensagens_usadas.filter((n) => Number.isInteger(n) && n > 0))].sort((a, b) => a - b),
     itens: o.itens
       // Keep items without a product name when they carry numbers: the buyer fills the name in.
@@ -101,7 +118,7 @@ export function normalizeOutput(o: ExtractionOutput): ExtractionOutput {
  * Local stand-in used when no Anthropic key is configured (development and tests).
  * Handles simple one-item messages like "Consigo 30 fontes Microsemi por USD 111,46 cada. Prazo de 45 dias. Pagamento 28 dias."
  */
-export const mockExtractor: Extractor = async ({ text, conversation }) => {
+export const mockExtractor: Extractor = async ({ text, conversation, attachments }) => {
   const started = Date.now();
   // With a conversation and no selection, use the supplier's last message that carries a number.
   let used: number[] = [];
@@ -150,6 +167,9 @@ export const mockExtractor: Extractor = async ({ text, conversation }) => {
       itens: items,
       campos_ambiguos: [],
       mensagens_usadas: used,
+      trecho_documento: null,
+      // The local heuristic cannot read files.
+      ...(attachments?.length ? { campos_ambiguos: [{ campo: 'anexo', motivo: 'Leitura de PDF e imagem exige EXTRACTION_MODE=claude' }] } : {}),
     },
     model: 'mock',
     latencyMs: Date.now() - started,

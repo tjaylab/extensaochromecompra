@@ -1,5 +1,15 @@
 import { defineContentScript } from 'wxt/utils/define-content-script';
-import type { CaptureMessage, ContactRequest, ContactResponse, ConversationRequest, ConversationResponse } from '../lib/capture';
+import {
+  blobToDataUrl,
+  splitDataUrl,
+  type CaptureMessage,
+  type ContactRequest,
+  type ContactResponse,
+  type ConversationRequest,
+  type ConversationResponse,
+  type ImageRequest,
+  type ImageResponse,
+} from '../lib/capture';
 import { isInConversation, readContact, readConversation } from '../lib/whatsapp-dom';
 
 // Shows a floating "Registrar cotação" button next to text selected inside the open conversation.
@@ -71,10 +81,37 @@ export default defineContentScript({
 
     // Used by the right-click menu and the side panel's "Registrar da conversa aberta".
     chrome.runtime.onMessage.addListener(
-      (msg: ContactRequest | ConversationRequest, _sender, sendResponse: (r: ContactResponse | ConversationResponse) => void) => {
+      (
+        msg: ContactRequest | ConversationRequest | ImageRequest,
+        _sender,
+        sendResponse: (r: ContactResponse | ConversationResponse | ImageResponse) => void,
+      ) => {
         if (msg?.type === 'get-contact') sendResponse(readContact());
         if (msg?.type === 'get-conversation') sendResponse({ ...readContact(), conversation: readConversation() });
+        if (msg?.type === 'get-image') {
+          // Right-click > "Registrar cotação desta imagem": the image is a blob: URL only this page can read.
+          readImage(msg.src).then(
+            (image) => sendResponse({ ...readContact(), conversation: readConversation(), image }),
+            (err) => sendResponse({ ...readContact(), conversation: readConversation(), image: null, error: String(err?.message ?? err) }),
+          );
+          return true; // async sendResponse
+        }
       },
     );
+
+    async function readImage(src: string) {
+      // In the chat bubble WhatsApp shows a reduced image; opening it first gives the full resolution.
+      const res = await fetch(src);
+      const blob = await res.blob();
+      if (blob.size > 8 * 1024 * 1024) throw new Error('Imagem maior que 8 MB');
+      const parts = splitDataUrl(await blobToDataUrl(blob));
+      if (!parts || !parts.media_type.startsWith('image/')) throw new Error('Não foi possível ler a imagem');
+      const media_type = (['image/jpeg', 'image/png', 'image/webp', 'image/gif'].includes(parts.media_type) ? parts.media_type : 'image/jpeg') as
+        | 'image/jpeg'
+        | 'image/png'
+        | 'image/webp'
+        | 'image/gif';
+      return { name: 'imagem-whatsapp', media_type, data: parts.data };
+    }
   },
 });

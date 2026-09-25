@@ -1,4 +1,5 @@
-import { formatConversation, todayIso, type ConversationMessage, type ExtractionRequest, type ExtractionResponse } from '@compras/shared';
+import { createHash } from 'node:crypto';
+import { formatConversation, todayIso, type Attachment, type ConversationMessage, type ExtractionRequest, type ExtractionResponse } from '@compras/shared';
 import type { AppContext, Member } from '../context.js';
 import { extractions } from '../db/schema.js';
 import { HttpError } from '../lib/errors.js';
@@ -20,9 +21,18 @@ function rateLimit(userId: string) {
 export async function runExtraction(ctx: AppContext, member: Member, input: ExtractionRequest): Promise<ExtractionResponse> {
   rateLimit(member.userId);
   const conversation = input.conversation?.filter((m) => m.text.trim()) ?? null;
-  const result = await ctx.extractor({ text: input.text, conversation, contactName: input.contact_name, today: todayIso() });
-  // Everything sent to the model is kept on the extraction (audit and quality review).
-  const sent = [conversation?.length ? formatConversation(conversation) : null, input.text ? `Seleção: ${input.text}` : null].filter(Boolean).join('\n\n');
+  const attachments = input.attachments ?? [];
+  const result = await ctx.extractor({ text: input.text, conversation, attachments, contactName: input.contact_name, today: todayIso() });
+  // Everything sent to the model is kept on the extraction (audit and quality review). Files are
+  // referenced by name, size and hash, not stored.
+  const files = attachments.map((a) => attachmentLabel(a));
+  const sent = [
+    conversation?.length ? formatConversation(conversation) : null,
+    input.text ? `Seleção: ${input.text}` : null,
+    files.length ? files.map((f, i) => `${f} sha256:${createHash('sha256').update(attachments[i]!.data, 'base64').digest('hex').slice(0, 16)}`).join('\n') : null,
+  ]
+    .filter(Boolean)
+    .join('\n\n');
   const [row] = await ctx.db
     .insert(extractions)
     .values({
@@ -53,10 +63,22 @@ export async function runExtraction(ctx: AppContext, member: Member, input: Extr
   return {
     extraction_id: row.id,
     data: result.output,
-    source_text: sourceExcerpt(input.text, conversation, result.output.mensagens_usadas),
+    source_text: withDocument(sourceExcerpt(input.text, conversation, result.output.mensagens_usadas), files, result.output.trecho_documento),
     supplier_match: supplierMatch,
     latency_ms: result.latencyMs,
   };
+}
+
+export function attachmentLabel(a: Attachment): string {
+  const kb = Math.round((a.data.length * 3) / 4 / 1024);
+  return `Arquivo: ${a.name?.trim() || (a.media_type === 'application/pdf' ? 'documento.pdf' : 'imagem')} (${a.media_type}, ${kb} KB)`;
+}
+
+/** With attachments, the quote keeps the file references and the lines the model transcribed from them. */
+export function withDocument(excerpt: string, files: string[], transcript: string | null): string {
+  if (!files.length) return excerpt;
+  const doc = [files.join('\n'), transcript ? `Trecho do documento:\n${transcript}` : null].filter(Boolean).join('\n');
+  return excerpt ? `${doc}\n\n${excerpt}` : doc;
 }
 
 /**

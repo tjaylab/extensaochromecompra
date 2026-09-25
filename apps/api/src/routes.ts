@@ -69,7 +69,8 @@ export function registerRoutes(app: FastifyInstance, ctx: AppContext) {
   app.post('/v1/company/omie-check', async (req) => checkOmie(ctx, member(req)));
 
   // --- Extraction -----------------------------------------------------------
-  app.post('/v1/extractions', async (req) => runExtraction(ctx, member(req), parse(ExtractionRequest, req.body)));
+  // Up to 3 files of 8 MB each, base64-encoded.
+  app.post('/v1/extractions', { bodyLimit: 40 * 1024 * 1024 }, async (req) => runExtraction(ctx, member(req), parse(ExtractionRequest, req.body)));
 
   // --- Suppliers ------------------------------------------------------------
   app.get('/v1/suppliers', async (req) => listSuppliers(ctx, member(req), (req.query as { q?: string }).q));
