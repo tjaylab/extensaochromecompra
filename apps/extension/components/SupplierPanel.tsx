@@ -11,6 +11,15 @@ function useActiveContact(): ContactResponse | null {
   useEffect(() => {
     const apply = (c: ActiveContact | undefined) => setContact(c && (c.contactName || c.contactPhone) ? { contactName: c.contactName, contactPhone: c.contactPhone } : null);
     chrome.storage.session.get(ACTIVE_CONTACT_KEY).then((r) => apply(r[ACTIVE_CONTACT_KEY] as ActiveContact | undefined));
+    // Also ask the WhatsApp tab directly: it may have been open before the extension started.
+    chrome.tabs
+      ?.query({ url: 'https://web.whatsapp.com/*' })
+      .then((tabs) => {
+        const tab = tabs.find((t) => t.active) ?? tabs[0];
+        return tab?.id ? chrome.tabs.sendMessage<{ type: 'get-contact' }, ContactResponse>(tab.id, { type: 'get-contact' }) : undefined;
+      })
+      .then((c) => c && (c.contactName || c.contactPhone) && apply({ ...c, at: Date.now() }))
+      .catch(() => {});
     const onChange = (changes: Record<string, chrome.storage.StorageChange>, area: string) => {
       if (area === 'session' && ACTIVE_CONTACT_KEY in changes) apply(changes[ACTIVE_CONTACT_KEY]!.newValue as ActiveContact | undefined);
     };

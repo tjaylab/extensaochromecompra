@@ -1,4 +1,4 @@
-# Compras WhatsApp
+# ProcureMate
 
 Extensão para Chrome que transforma propostas de fornecedores recebidas no WhatsApp Web em cotações estruturadas, compara propostas de uma mesma requisição e envia o pedido de compra escolhido ao Omie.
 

@@ -129,7 +129,7 @@ export function Header({ title }: { title: string }) {
         </button>
       )}
       <div className="header-title">
-        <span className="header-kicker">Compras</span>
+        <span className="header-kicker">ProcureMate</span>
         <span className="header-name">{title}</span>
       </div>
       <OmieChip />
@@ -137,10 +137,11 @@ export function Header({ title }: { title: string }) {
   );
 }
 
-export function Screen({ title, children, footer }: { title: string; children: ReactNode; footer?: ReactNode }) {
+export function Screen({ title, children, footer, subheader }: { title: string; children: ReactNode; footer?: ReactNode; subheader?: ReactNode }) {
   return (
     <div className="app">
       <Header title={title} />
+      {subheader}
       <main className="body">{children}</main>
       {footer && <footer className="footer">{footer}</footer>}
     </div>

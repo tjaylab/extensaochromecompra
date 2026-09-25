@@ -54,6 +54,12 @@ describe('contact and selection scope', () => {
   it('reads the contact from the header and the phone from the message ids', () => {
     expect(readContact()).toEqual({ contactName: 'Carlos (Microsemi)', contactPhone: '+5511970001234' });
   });
+  it('falls back to the header text and to the message ids when the title markup changes', () => {
+    document.querySelector('#main header')!.innerHTML = '<div role="button"><div><span>Carlos (Microsemi)</span></div><div><span>visto por último hoje</span></div></div>';
+    expect(readContact()).toEqual({ contactName: 'Carlos (Microsemi)', contactPhone: '+5511970001234' });
+    document.querySelector('#main header')!.innerHTML = '';
+    expect(readContact()).toEqual({ contactName: null, contactPhone: '+5511970001234' });
+  });
   it('gives no phone for group chats or privacy ids', () => {
     document.querySelectorAll('[data-id]').forEach((el) => el.setAttribute('data-id', 'false_120363025@g.us_ABC'));
     expect(phoneFromMessageIds()).toBeNull();

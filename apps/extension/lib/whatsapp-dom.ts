@@ -54,7 +54,16 @@ export function readContact(): { contactName: string | null; contactPhone: strin
       break;
     }
   }
-  if (!title) return { contactName: null, contactPhone: null };
+  if (!title) {
+    // Header markup changed: take its first line of text (the chat name comes first).
+    const header = document.querySelector('#main header') as HTMLElement | null;
+    const firstLine = (header?.innerText ?? header?.textContent ?? '')
+      .split('\n')
+      .map((l) => l.trim())
+      .find((l) => l.length > 1);
+    title = firstLine ?? null;
+  }
+  if (!title) return { contactName: null, contactPhone: phoneFromMessageIds() };
   if (PHONE_RE.test(title)) return { contactName: null, contactPhone: title };
   // Saved contacts: the number may be in the header's subtitle or in the message ids.
   const subtitle = document.querySelector('#main header span[title*="+"]')?.getAttribute('title')?.trim() ?? null;

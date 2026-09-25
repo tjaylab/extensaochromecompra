@@ -42,7 +42,7 @@ export function Login({ onSignedIn }: { onSignedIn: () => void }) {
     <div className="app">
       <main className="body" style={{ justifyContent: 'center' }}>
         <div className="stack" style={{ gap: 4 }}>
-          <span className="header-kicker">Compras WhatsApp</span>
+          <span className="header-kicker">ProcureMate</span>
           <h1 style={{ margin: 0, fontSize: 22 }}>{mode === 'in' ? 'Entrar' : 'Criar conta'}</h1>
           <span className="muted">Registre cotações recebidas no WhatsApp em poucos segundos.</span>
         </div>
@@ -106,10 +106,10 @@ export function Onboarding({ me, onDone }: { me: MeDTO; onDone: () => void }) {
     <div className="app">
       <main className="body" style={{ justifyContent: 'center' }}>
         <div className="stack" style={{ gap: 4 }}>
-          <span className="header-kicker">Compras WhatsApp</span>
+          <span className="header-kicker">ProcureMate</span>
           <h1 style={{ margin: 0, fontSize: 22 }}>Sua empresa</h1>
           <span className="muted">
-            Você entrou como {me.user.email}. Se alguém da sua empresa já usa o Compras WhatsApp, peça um convite para este e-mail em vez de criar outra empresa.
+            Você entrou como {me.user.email}. Se alguém da sua empresa já usa o ProcureMate, peça um convite para este e-mail em vez de criar outra empresa.
           </span>
         </div>
         {error && <ErrorBanner message={error} />}
