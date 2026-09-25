@@ -1,5 +1,6 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { isoToBr } from '@compras/shared';
+import { AUTO_READ_KEY } from '../../lib/capture';
 import { api } from '../../lib/api';
 import { ErrorBanner, Field, Screen, Spinner, useLoad, useSession } from '../ui';
 
@@ -14,6 +15,7 @@ export function Settings() {
         <span className="muted">{me.company!.name}</span>
         <button type="button" className="btn btn-secondary" style={{ alignSelf: 'flex-start' }} onClick={signOut}>Sair</button>
       </section>
+      <AutoReadSetting />
       <OmieSettings admin={admin} onChange={refresh} />
       {admin && <Team />}
       {admin && <Metrics />}
@@ -183,6 +185,31 @@ function Metrics() {
           ))}
         </div>
       )}
+    </section>
+  );
+}
+
+function AutoReadSetting() {
+  const [on, setOn] = useState(true);
+  useEffect(() => {
+    chrome.storage.local.get(AUTO_READ_KEY).then((r) => setOn(r[AUTO_READ_KEY] !== false));
+  }, []);
+  const toggle = (v: boolean) => {
+    setOn(v);
+    chrome.storage.local.set({ [AUTO_READ_KEY]: v }).catch(() => {});
+  };
+  return (
+    <section className="card">
+      <span className="section-label">Leitura automática</span>
+      <label className="row" style={{ alignItems: 'flex-start', gap: 10, cursor: 'pointer' }}>
+        <input type="checkbox" checked={on} onChange={(e) => toggle(e.target.checked)} style={{ width: 18, height: 18, marginTop: 2 }} />
+        <span className="stack" style={{ gap: 2 }}>
+          <span>Ler imagens e PDFs recebidos de fornecedores</span>
+          <span className="small muted">
+            Quando chega uma imagem ou você baixa um PDF numa conversa com fornecedor reconhecido, a IA procura a cotação sozinha. Em outras conversas, só lê se você pedir.
+          </span>
+        </span>
+      </label>
     </section>
   );
 }

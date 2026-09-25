@@ -53,3 +53,9 @@
 // Simulates switching conversations in WhatsApp Web: __openChat('Carlos (Microsemi)', '+55 11 97000-1234')
 window.__openChat = (contactName = null, contactPhone = null) =>
   chrome.storage.session.set({ activeContact: { contactName, contactPhone, at: Date.now() } });
+// Simulates something arriving in the open conversation:
+// __suggest({ kind: 'text', text: 'Fica USD 105,90 cada' }) or __suggest({ kind: 'pdf', text: 'orc.pdf', attachment: {...} })
+window.__suggest = (s) =>
+  chrome.storage.session.set({
+    suggestion: { id: String(Date.now()), at: Date.now(), contact: { contactName: window.__contactName ?? 'Carlos (Microsemi)', contactPhone: window.__contactPhone ?? '+55 11 97000-1234' }, text: '', ...s },
+  });

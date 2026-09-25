@@ -10,8 +10,11 @@ import {
   type ConversationResponse,
   type ImageRequest,
   type ImageResponse,
+  type SuggestionMessage,
+  PDF_MESSAGE,
 } from '../lib/capture';
-import { isInConversation, readContact, readConversation } from '../lib/whatsapp-dom';
+import { MessageWatch } from '../lib/message-watch';
+import { isInConversation, readContact, readConversation, readMessageRows } from '../lib/whatsapp-dom';
 
 // Shows a floating "Registrar cotação" button next to text selected inside the open conversation.
 // Reads only the open conversation (selected text, its recent messages and the contact), and only
@@ -110,12 +113,63 @@ export default defineContentScript({
       const msg: ContactChangedMessage = { type: 'contact-changed', contact };
       chrome.runtime.sendMessage(msg).catch(() => {});
     };
+    // Watch the open conversation for new proposals: priced text, images and PDFs from the supplier.
+    const watch = new MessageWatch();
+    const suggest = (s: SuggestionMessage['suggestion']) => chrome.runtime.sendMessage({ type: 'suggestion', suggestion: s } satisfies SuggestionMessage).catch(() => {});
+    const scanMessages = () => {
+      const contact = readContact();
+      const chat = `${contact.contactName ?? ''}|${contact.contactPhone ?? ''}`;
+      for (const a of watch.scan(chat, readMessageRows())) {
+        if (a.kind === 'text') suggest({ kind: 'text', contact, text: a.row.text });
+        if (a.kind === 'pdf-hint') suggest({ kind: 'pdf-hint', contact, text: a.row.pdfName ?? 'documento.pdf' });
+        if (a.kind === 'image' && a.row.image) {
+          const el = a.row.image;
+          imageData(el)
+            .then((attachment) => suggest({ kind: 'image', contact, text: a.row.text, attachment, conversation: readConversation() }))
+            .catch(() => {});
+        }
+      }
+    };
+
+    // PDFs the buyer downloads: handed over by the page-context script (whatsapp-pdf.content.ts).
+    window.addEventListener('message', (e) => {
+      if (e.source !== window || e.origin !== window.location.origin || e.data?.source !== PDF_MESSAGE) return;
+      const data = String(e.data.data ?? '');
+      if (!data || Math.floor((data.length * 3) / 4) > 8 * 1024 * 1024) return;
+      const name = String(e.data.name ?? 'documento.pdf').slice(0, 200);
+      suggest({
+        kind: 'pdf',
+        contact: readContact(),
+        text: name,
+        attachment: { name, media_type: 'application/pdf', data },
+        conversation: readConversation(),
+      });
+    });
+
     let timer: ReturnType<typeof setTimeout> | undefined;
     new MutationObserver(() => {
       clearTimeout(timer);
-      timer = setTimeout(announce, 400);
+      timer = setTimeout(() => {
+        announce();
+        scanMessages();
+      }, 400);
     }).observe(document.body, { childList: true, subtree: true });
     announce();
+    scanMessages();
+
+    /** The image as shown in the bubble: read the blob, or draw it when the blob cannot be fetched. */
+    async function imageData(img: HTMLImageElement) {
+      try {
+        return await readImage(img.src);
+      } catch {
+        const canvas = document.createElement('canvas');
+        canvas.width = img.naturalWidth;
+        canvas.height = img.naturalHeight;
+        canvas.getContext('2d')!.drawImage(img, 0, 0);
+        const parts = splitDataUrl(canvas.toDataURL('image/jpeg', 0.92))!;
+        return { name: 'imagem-whatsapp', media_type: 'image/jpeg' as const, data: parts.data };
+      }
+    }
 
     async function readImage(src: string) {
       // In the chat bubble WhatsApp shows a reduced image; opening it first gives the full resolution.

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { brToIso, isValidCnpj, normalizePhone, normalizeSupplierName, parseDecimal } from '@compras/shared';
+import { brToIso, isValidCnpj, looksLikeProposal, normalizePhone, normalizeSupplierName, parseDecimal } from '@compras/shared';
 import { mockExtractor } from '../src/extraction/extractor.js';
 import { suggestPaymentTerm } from '../src/services/catalog.js';
 import { correctedFields } from '../src/services/quotes.js';
@@ -107,4 +107,19 @@ describe('correctedFields', () => {
     expect(correctedFields(output, base)).toEqual([]);
     expect(correctedFields(output, { ...base, freight_type: 'CIF', items: [{ ...base.items[0], sku: 'LRS-150-24' }] }).sort()).toEqual(['frete', 'itens.sku']);
   });
+});
+
+describe('looksLikeProposal', () => {
+  it.each([
+    ['Consigo 30 fontes Microsemi por USD 111,46 cada. Prazo de 45 dias.', true],
+    ['R$ 589,90 a unidade, frete incluso', true],
+    ['500m cabo PP a 8,42/m', true],
+    ['Fica 1.250,00 o lote, prazo 5 dias', true],
+    ['Consigo por 1500 reais', true],
+    ['Opa, errei: fica 105,90 cada', true],
+    ['Bom dia! Vou verificar com o estoque.', false],
+    ['O prazo é de 45 dias', false],
+    ['Pedido 1234 chegou hoje às 10:30', false],
+    ['', false],
+  ])('%s -> %s', (text, expected) => expect(looksLikeProposal(text)).toBe(expected));
 });

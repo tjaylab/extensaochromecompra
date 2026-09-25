@@ -1,5 +1,5 @@
 // Messages and storage shared by the content script, the service worker and the side panel.
-import type { Attachment, ConversationMessage } from '@compras/shared';
+import type { Attachment, ConversationMessage, ExtractionResponse } from '@compras/shared';
 
 export interface Capture {
   id: string;
@@ -9,6 +9,8 @@ export interface Capture {
    */
   mode: 'selection' | 'conversation' | 'file';
   attachments?: Attachment[] | null;
+  /** Already interpreted (automatic reading): the review screen skips the call. */
+  extraction?: ExtractionResponse | null;
   /** Selected text ('' in conversation mode). */
   text: string;
   /** Recent messages of the open conversation, oldest first (context for the selection, or the whole input). */
@@ -47,6 +49,28 @@ export type ContactChangedMessage = { type: 'contact-changed'; contact: ContactR
 /** The contact of the conversation open in WhatsApp Web right now (kept by the service worker). */
 export const ACTIVE_CONTACT_KEY = 'activeContact';
 export type ActiveContact = ContactResponse & { at: number };
+
+/**
+ * Something new arrived in the open conversation that may be a proposal:
+ * 'text' a message with a price, 'image' an image, 'pdf' a PDF the buyer downloaded,
+ * 'pdf-hint' a PDF that arrived but has not been downloaded yet.
+ */
+export interface Suggestion {
+  id: string;
+  kind: 'text' | 'image' | 'pdf' | 'pdf-hint';
+  contact: ContactResponse;
+  /** The message text (text), the caption (image) or the file name (pdf, pdf-hint). */
+  text: string;
+  attachment?: Attachment | null;
+  conversation?: ConversationMessage[] | null;
+  at: number;
+}
+export type SuggestionMessage = { type: 'suggestion'; suggestion: Omit<Suggestion, 'id' | 'at'> };
+export const SUGGESTION_KEY = 'suggestion';
+/** window.postMessage tag used by the page-context script that hands over downloaded PDFs. */
+export const PDF_MESSAGE = '__procuremate_pdf__';
+/** chrome.storage.local: read images and PDFs from recognized suppliers automatically (default on). */
+export const AUTO_READ_KEY = 'autoReadMedia';
 
 export const PENDING_CAPTURE_KEY = 'pendingCapture';
 /** Set by the service worker when a capture fails (e.g. an image it could not read). */

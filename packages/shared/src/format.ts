@@ -73,6 +73,19 @@ export function phoneKey(phone: string | null | undefined, ddd?: string | null):
   return d.slice(0, 2) + d.slice(-8);
 }
 
+/**
+ * Cheap first pass before calling the model: does this incoming message look like a commercial proposal?
+ * A price ("R$ 589,90", "USD 111,46", "111,46 cada", "8,42/m") is required; quote vocabulary alone is not enough.
+ */
+export function looksLikeProposal(text: string | null | undefined): boolean {
+  if (!text) return false;
+  const t = text.toLowerCase().replace(/\s+/g, ' ');
+  const currencyAmount = /(r\$|us\$|usd|eur|€|\$)\s?\d/.test(t) || /\d[\d.,]*\s?(reais|d[óo]lares|euros)\b/.test(t);
+  const unitPrice = /\d+[.,]\d{2}\s?(cada|a unidade|por unidade|\/\s?(un|und|unid|pc|p[çc]|m|kg|cx|rolo|lt|l))\b/.test(t);
+  const quoteWords = /\b(pre[çc]o|valor|or[çc]amento|cota[çc][ãa]o|proposta|prazo|pagamento|frete|entrega)\b/.test(t) && /\d+[.,]\d{2}\b/.test(t);
+  return currencyAmount || unitPrice || quoteWords;
+}
+
 export function onlyDigits(s: string | null | undefined): string {
   return (s ?? '').replace(/\D/g, '');
 }

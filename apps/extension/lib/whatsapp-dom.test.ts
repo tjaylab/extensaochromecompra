@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { isInConversation, phoneFromMessageIds, readContact, readConversation } from './whatsapp-dom';
+import { isInConversation, phoneFromMessageIds, readContact, readConversation, readMessageRows } from './whatsapp-dom';
 
 // Mirrors the parts of WhatsApp Web's markup the extension relies on.
 const msg = (dir: 'in' | 'out', meta: string, text: string, extra = '') => `
@@ -74,5 +74,17 @@ describe('contact and selection scope', () => {
     expect(isInConversation(document.querySelector('.selectable-text'))).toBe(true);
     expect(isInConversation(document.querySelector('#side span'))).toBe(false);
     expect(isInConversation(document.querySelector('footer div'))).toBe(false);
+  });
+});
+
+describe('readMessageRows', () => {
+  it('lists bubbles with direction, text, image and PDF name', () => {
+    const list = document.querySelector('#main .list')!;
+    list.insertAdjacentHTML('beforeend', `<div role="row"><div data-id="false_5511970001234@c.us_PDF1"><div class="message-in"><span>Orcamento_4471.pdf</span><span>2 páginas · PDF · 180 kB</span></div></div></div>`);
+    const rows = readMessageRows();
+    expect(rows.map((r) => r.direction)).toEqual(['out', 'in', 'in', 'in']);
+    expect(rows[1]!.text).toBe('Consigo 30 fontes Microsemi por USD 111,46 cada.');
+    expect(rows[2]!.image).not.toBeNull();
+    expect(rows[3]).toMatchObject({ pdfName: 'Orcamento_4471.pdf', image: null });
   });
 });

@@ -8,6 +8,9 @@ import {
   type ImageResponse,
   type ActiveContact,
   type ContactChangedMessage,
+  type Suggestion,
+  type SuggestionMessage,
+  SUGGESTION_KEY,
   ACTIVE_CONTACT_KEY,
   CAPTURE_ERROR_KEY,
 } from '../lib/capture';
@@ -81,6 +84,19 @@ export default defineBackground(() => {
   });
 
   // Floating "Registrar cotação" button in the conversation.
+  // A possible proposal arrived in the open conversation: the side panel offers to register it.
+  chrome.runtime.onMessage.addListener((msg: SuggestionMessage) => {
+    if (msg?.type !== 'suggestion') return;
+    const suggestion: Suggestion = { ...msg.suggestion, id: newCaptureId(), at: Date.now() };
+    chrome.storage.session
+      .set({ [SUGGESTION_KEY]: suggestion })
+      // Session storage holds 10 MB: a very large file goes without its data (the panel then asks to attach it).
+      .catch(() => chrome.storage.session.set({ [SUGGESTION_KEY]: { ...suggestion, attachment: null } }))
+      .then(() => chrome.action.setBadgeText({ text: '•' }))
+      .then(() => chrome.action.setBadgeBackgroundColor({ color: '#1E6B55' }))
+      .catch(() => {});
+  });
+
   // The conversation open in WhatsApp Web: the side panel shows this supplier's history.
   chrome.runtime.onMessage.addListener((msg: ContactChangedMessage) => {
     if (msg?.type !== 'contact-changed') return;

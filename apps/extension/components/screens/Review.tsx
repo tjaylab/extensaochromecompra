@@ -105,6 +105,15 @@ export function Review({ capture }: { capture: Capture & { origin: 'whatsapp' | 
   const [now, setNow] = useState(Date.now());
 
   const extract = () => {
+    // Already read automatically (image or PDF from the conversation): use that result.
+    if (capture.extraction && !ex) {
+      const r = capture.extraction;
+      setEx(r);
+      setForm(formFromExtraction(r, capture));
+      setPhase('form');
+      api.event('extraction_viewed', r.extraction_id);
+      return;
+    }
     setPhase('extracting');
     setExtractError(null);
     api

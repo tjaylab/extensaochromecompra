@@ -78,6 +78,37 @@ function directionOf(el: Element): 'in' | 'out' {
   return id.startsWith('true_') ? 'out' : 'in';
 }
 
+export interface MessageRow {
+  id: string;
+  direction: 'in' | 'out';
+  text: string;
+  /** A received image rendered in the bubble (blob: URL), if any. */
+  image: HTMLImageElement | null;
+  /** File name when the bubble is a PDF document. */
+  pdfName: string | null;
+}
+
+const ROW_ID_RE = /^(true|false)_/;
+
+/** Every message bubble loaded in the open conversation, in page order (oldest first). */
+export function readMessageRows(root: ParentNode | null = conversationRoot()): MessageRow[] {
+  if (!root) return [];
+  const rows: MessageRow[] = [];
+  for (const el of root.querySelectorAll<HTMLElement>('[data-id]')) {
+    const id = el.getAttribute('data-id') ?? '';
+    if (!ROW_ID_RE.test(id) || el.parentElement?.closest('[data-id]')) continue; // nested ids belong to the outer row
+    const textEl = el.querySelector<HTMLElement>('[data-pre-plain-text] .selectable-text') ?? el.querySelector<HTMLElement>('[data-pre-plain-text]');
+    const text = (textEl?.innerText ?? textEl?.textContent ?? '').trim();
+    const images = [...el.querySelectorAll<HTMLImageElement>('img[src^="blob:"]')];
+    const image = images.sort((a, b) => b.naturalWidth * b.naturalHeight - a.naturalWidth * a.naturalHeight)[0] ?? null;
+    const whole = (el.innerText ?? el.textContent ?? '').replace(/\s+/g, ' ');
+    // Bubble texts may run together ("Orcamento.pdf2 páginas"): ".pdf" must not be followed by a letter.
+    const pdfName = whole.match(/([\w\-. ()À-ú]{1,120}\.pdf)(?![a-z])/i)?.[1]?.trim() ?? null;
+    rows.push({ id, direction: id.startsWith('true_') ? 'out' : directionOf(el), text, image, pdfName });
+  }
+  return rows;
+}
+
 /**
  * The most recent text messages loaded in the open conversation, oldest first.
  * Only what WhatsApp has rendered: older messages need the buyer to scroll up first.
