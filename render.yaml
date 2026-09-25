@@ -1,0 +1,45 @@
+# Render Blueprint: Dashboard > New > Blueprint > this repository.
+# Values marked "sync: false" are secrets: Render asks for them on the first deploy; they never live in the repo.
+services:
+  - type: web
+    name: compras-api
+    runtime: docker
+    dockerfilePath: ./apps/api/Dockerfile
+    dockerContext: .
+    plan: starter
+    region: ohio # same AWS region as the Supabase project (us-east-2)
+    healthCheckPath: /health
+    autoDeploy: true
+    buildFilter:
+      paths:
+        - apps/api/**
+        - packages/shared/**
+        - package-lock.json
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: AUTH_MODE
+        value: supabase
+      - key: SUPABASE_URL
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: ANTHROPIC_WORKSPACE_ID
+        sync: false
+      - key: EXTRACTION_MODE
+        value: claude
+      - key: CLAUDE_MODEL
+        value: claude-opus-5
+      - key: CLAUDE_EFFORT
+        value: low
+      - key: OMIE_MODE
+        value: live
+      # Must match the key used when the Omie credentials were saved, or they cannot be decrypted.
+      - key: ENCRYPTION_KEY
+        sync: false
+      # Empty = any chrome-extension:// origin (unpacked installs get a different id on each machine).
+      # After publishing on the Chrome Web Store, set it to chrome-extension://<id>.
+      - key: CORS_ORIGINS
+        sync: false
