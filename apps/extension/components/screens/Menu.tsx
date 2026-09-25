@@ -1,5 +1,7 @@
+import { useState } from 'react';
 import { api } from '../../lib/api';
-import { Icon, Screen, useLoad, useNav, useSession } from '../ui';
+import { captureOpenConversation } from '../../lib/whatsapp-tab';
+import { ErrorBanner, Icon, Screen, useLoad, useNav, useSession } from '../ui';
 
 export function Menu() {
   const nav = useNav();
@@ -8,6 +10,21 @@ export function Menu() {
     const [quotes, reqs, orders] = await Promise.all([api.quotes(), api.requisitions('open'), api.orders()]);
     return { quotes: quotes.length, reqs: reqs.length, orders: orders.length };
   });
+  const [readError, setReadError] = useState<string | null>(null);
+  const [reading, setReading] = useState(false);
+
+  const fromConversation = async () => {
+    setReading(true);
+    setReadError(null);
+    try {
+      const capture = await captureOpenConversation();
+      nav.go({ name: 'review', capture: { ...capture, origin: 'whatsapp' } });
+    } catch (e) {
+      setReadError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setReading(false);
+    }
+  };
 
   const omieMissing = me.omie.status !== 'connected';
 
@@ -30,9 +47,13 @@ export function Menu() {
           </div>
         </div>
       )}
+      {readError && <ErrorBanner message={readError} />}
       <div className="stack">
-        <button type="button" className="btn btn-primary btn-lg" onClick={() => nav.go({ name: 'new' })}>
-          <Icon name="plus" size={20} /> Nova cotação
+        <button type="button" className="btn btn-primary btn-lg" onClick={fromConversation} disabled={reading}>
+          <Icon name="plus" size={20} /> {reading ? 'Lendo a conversa…' : 'Registrar da conversa aberta'}
+        </button>
+        <button type="button" className="btn btn-secondary btn-lg" onClick={() => nav.go({ name: 'new' })}>
+          Colar texto da proposta
         </button>
         <button type="button" className="btn btn-secondary btn-lg" onClick={() => nav.go({ name: 'quotes' })}>
           Minhas cotações <span className="count">{counts.data?.quotes ?? ''}</span>
@@ -51,7 +72,7 @@ export function Menu() {
         </button>
       </div>
       <div className="banner banner-info">
-        Fluxo principal: no WhatsApp Web, selecione o texto da proposta do fornecedor e clique em <strong>Registrar cotação</strong> (ou use o botão direito).
+        Abra a conversa com o fornecedor no WhatsApp Web e clique em <strong>Registrar da conversa aberta</strong>: a IA lê as mensagens recentes e acha a proposta vigente. Para apontar uma mensagem específica, selecione o texto e clique em <strong>Registrar cotação</strong>.
       </div>
     </Screen>
   );

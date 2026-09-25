@@ -35,15 +35,52 @@ export const ExtractionOutput = z.object({
   validade_proposta: z.string().nullable(),
   itens: z.array(ExtractedItem),
   campos_ambiguos: z.array(z.object({ campo: z.string(), motivo: z.string() })),
+  mensagens_usadas: z
+    .array(z.number())
+    .describe('Números [n] das mensagens da conversa de onde saiu a proposta vigente; vazio quando não houver conversa'),
 });
 export type ExtractionOutput = z.infer<typeof ExtractionOutput>;
 
-export const ExtractionRequest = z.object({
-  text: z.string().trim().min(1).max(4000),
-  contact_name: z.string().max(200).nullish(),
-  contact_phone: z.string().max(40).nullish(),
+/** One message read from the open WhatsApp conversation. */
+export const ConversationMessage = z.object({
+  direction: z.enum(['in', 'out']), // in = from the supplier, out = from the buyer
+  author: z.string().max(200).nullish(),
+  time: z.string().max(40).nullish(), // as WhatsApp shows it, e.g. "10:47, 25/09/2026"
+  text: z.string().max(3000),
 });
+export type ConversationMessage = z.infer<typeof ConversationMessage>;
+
+export const MAX_CONVERSATION_CHARS = 16_000;
+
+export const ExtractionRequest = z
+  .object({
+    /** The buyer's selection. Optional when a conversation is sent. */
+    text: z.string().trim().max(4000).default(''),
+    /** Recent messages of the open conversation, oldest first. */
+    conversation: z.array(ConversationMessage).max(80).nullish(),
+    contact_name: z.string().max(200).nullish(),
+    contact_phone: z.string().max(40).nullish(),
+  })
+  .refine((d) => d.text.length > 0 || (d.conversation?.length ?? 0) > 0, { message: 'Selecione uma mensagem ou abra uma conversa' })
+  .refine((d) => (d.conversation ?? []).reduce((a, m) => a + m.text.length, 0) <= MAX_CONVERSATION_CHARS, {
+    message: 'Conversa longa demais: selecione o trecho da proposta',
+  });
 export type ExtractionRequest = z.infer<typeof ExtractionRequest>;
+
+/**
+ * Renders the conversation as numbered lines, the format the model sees and the buyer reviews:
+ * "[3] 25/09 10:47 · Fornecedor · Carlos: Consigo 30 fontes…"
+ */
+export function formatConversation(messages: ConversationMessage[], opts: { only?: number[] } = {}): string {
+  return messages
+    .map((m, i) => ({ m, n: i + 1 }))
+    .filter(({ n }) => !opts.only || opts.only.includes(n))
+    .map(({ m, n }) => {
+      const who = m.direction === 'out' ? 'Comprador' : `Fornecedor${m.author ? ` · ${m.author}` : ''}`;
+      return `[${n}]${m.time ? ` ${m.time}` : ''} · ${who}: ${m.text}`;
+    })
+    .join('\n');
+}
 
 // ---------------------------------------------------------------------------
 // Domain DTOs returned by the API.
@@ -90,6 +127,8 @@ export interface SupplierMatch {
 export interface ExtractionResponse {
   extraction_id: string;
   data: ExtractionOutput;
+  /** What the quote preserves as its original text: the messages the proposal came from. */
+  source_text: string;
   supplier_match: SupplierMatch;
   latency_ms: number;
 }

@@ -1,32 +1,42 @@
 import { defineBackground } from 'wxt/utils/define-background';
-import { newCaptureId, PENDING_CAPTURE_KEY, type Capture, type CaptureMessage, type ContactResponse } from '../lib/capture';
+import { newCaptureId, PENDING_CAPTURE_KEY, type Capture, type CaptureMessage, type ConversationResponse } from '../lib/capture';
 
-const MENU_ID = 'registrar-cotacao';
+const MENU_SELECTION = 'registrar-cotacao';
+const MENU_CONVERSATION = 'registrar-conversa';
+const WHATSAPP = ['https://web.whatsapp.com/*'];
 
 export default defineBackground(() => {
   // The toolbar icon opens the side panel.
   chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(() => {});
 
   chrome.runtime.onInstalled.addListener(() => {
-    chrome.contextMenus.create({
-      id: MENU_ID,
-      title: 'Registrar cotação',
-      contexts: ['selection'],
-      documentUrlPatterns: ['https://web.whatsapp.com/*'],
-    });
+    chrome.contextMenus.create({ id: MENU_SELECTION, title: 'Registrar cotação', contexts: ['selection'], documentUrlPatterns: WHATSAPP });
+    chrome.contextMenus.create({ id: MENU_CONVERSATION, title: 'Registrar cotação da conversa', contexts: ['page'], documentUrlPatterns: WHATSAPP });
   });
 
-  // Right-click > "Registrar cotação".
+  // Right-click > "Registrar cotação" (selection) or "Registrar cotação da conversa" (anywhere on the page).
   chrome.contextMenus.onClicked.addListener((info, tab) => {
-    if (info.menuItemId !== MENU_ID || !tab?.id || !info.selectionText) return;
+    if (!tab?.id) return;
+    const isSelection = info.menuItemId === MENU_SELECTION;
+    if (!isSelection && info.menuItemId !== MENU_CONVERSATION) return;
+    if (isSelection && !info.selectionText) return;
     const tabId = tab.id;
     // Open first: sidePanel.open must run while the user gesture is still active.
     chrome.sidePanel.open({ tabId }).catch(() => {});
     const capturedAt = Date.now();
     chrome.tabs
-      .sendMessage<{ type: 'get-contact' }, ContactResponse>(tabId, { type: 'get-contact' })
-      .catch(() => ({ contactName: null, contactPhone: null }))
-      .then((contact) => storeCapture({ text: info.selectionText!, capturedAt, ...(contact ?? { contactName: null, contactPhone: null }) }));
+      .sendMessage<{ type: 'get-conversation' }, ConversationResponse>(tabId, { type: 'get-conversation' })
+      .catch(() => null)
+      .then((r) =>
+        storeCapture({
+          mode: isSelection ? 'selection' : 'conversation',
+          text: isSelection ? info.selectionText! : '',
+          conversation: r?.conversation ?? null,
+          contactName: r?.contactName ?? null,
+          contactPhone: r?.contactPhone ?? null,
+          capturedAt,
+        }),
+      );
   });
 
   // Floating "Registrar cotação" button in the conversation.

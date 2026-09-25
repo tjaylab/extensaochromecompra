@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   brToIso,
+  formatConversation,
   formatMoney,
   isoToBr,
   parseDecimal,
@@ -103,7 +104,7 @@ export function Review({ capture }: { capture: Capture & { origin: 'whatsapp' | 
     setPhase('extracting');
     setExtractError(null);
     api
-      .extract({ text: capture.text, contact_name: capture.contactName, contact_phone: capture.contactPhone })
+      .extract({ text: capture.text, conversation: capture.conversation, contact_name: capture.contactName, contact_phone: capture.contactPhone })
       .then((r) => {
         setEx(r);
         setForm(formFromExtraction(r, capture));
@@ -136,6 +137,10 @@ export function Review({ capture }: { capture: Capture & { origin: 'whatsapp' | 
   });
   const total = totals.reduce<number>((a, t) => a + (t ?? 0), 0);
   const elapsed = Math.max(0, Math.floor((now - capture.capturedAt) / 1000));
+  // What the quote preserves: the API's excerpt (selection or the messages used), else what was captured.
+  const sourceText =
+    ex?.source_text || capture.text || (capture.conversation?.length ? formatConversation(capture.conversation) : '');
+  const noProposal = phase === 'form' && capture.mode === 'conversation' && ex && ex.data.itens.length === 0;
   const timer = `${String(Math.floor(elapsed / 60)).padStart(2, '0')}:${String(elapsed % 60).padStart(2, '0')}`;
 
   const missingCount = useMemo(() => {
@@ -180,7 +185,7 @@ export function Review({ capture }: { capture: Capture & { origin: 'whatsapp' | 
       freight_value: freightValue,
       validity_text: form.validity_text || null,
       quote_date: quoteDate!,
-      source_text: capture.text,
+      source_text: sourceText,
       origin: capture.origin,
       registration_ms: Date.now() - capture.capturedAt,
       items,
@@ -215,8 +220,8 @@ export function Review({ capture }: { capture: Capture & { origin: 'whatsapp' | 
   if (phase === 'extracting') {
     return (
       <Screen title="Registrar cotação">
-        <Spinner label="Interpretando a mensagem…" />
-        <div className="source">{capture.text}</div>
+        <Spinner label={capture.mode === 'conversation' ? `Lendo ${capture.conversation?.length ?? 0} mensagens da conversa…` : 'Interpretando a mensagem…'} />
+        <div className="source">{capture.text || formatConversation(capture.conversation ?? []).split('\n').slice(-4).join('\n')}</div>
         <div className="stack">
           {[60, 45, 52].map((w) => (
             <div key={w} className="stack" style={{ gap: 6 }}>
@@ -263,10 +268,23 @@ export function Review({ capture }: { capture: Capture & { origin: 'whatsapp' | 
         </div>
       )}
       {saveError && <ErrorBanner message={saveError} />}
+      {noProposal && (
+        <div className="banner banner-info">
+          Não encontrei uma proposta com preço nas últimas mensagens. Se ela for mais antiga, role a conversa para cima e tente de novo, ou selecione o texto da proposta.
+        </div>
+      )}
 
       <div className="stack">
-        <span className="section-label">Texto original · {capture.origin === 'whatsapp' ? 'WhatsApp' : 'colado'}</span>
-        <div className="source">{capture.text}</div>
+        <span className="section-label">
+          {capture.mode === 'conversation' ? 'Mensagens usadas · WhatsApp' : `Texto original · ${capture.origin === 'whatsapp' ? 'WhatsApp' : 'colado'}`}
+        </span>
+        <div className="source">{sourceText}</div>
+        {!!capture.conversation?.length && (
+          <details>
+            <summary className="small muted" style={{ cursor: 'pointer' }}>Ver as {capture.conversation.length} mensagens lidas da conversa</summary>
+            <div className="source small" style={{ marginTop: 8, maxHeight: 240, overflow: 'auto' }}>{formatConversation(capture.conversation)}</div>
+          </details>
+        )}
       </div>
 
       <section className="stack" aria-labelledby="sup-label">
@@ -362,7 +380,7 @@ export function Review({ capture }: { capture: Capture & { origin: 'whatsapp' | 
           <Field id="quote-date" label="Data da cotação" error={errors.quote_date}>
             <input id="quote-date" className="input" value={form.quote_date} onChange={(e) => set('quote_date', e.target.value)} />
           </Field>
-          <Field id="days" label="Prazo de entrega (dias)" error={errors.delivery_days} hint={form.delivery_text && form.delivery_text !== `${form.delivery_days} dias` ? `Na mensagem: "${form.delivery_text}"` : undefined}>
+          <Field id="days" label="Prazo de entrega (dias)" error={errors.delivery_days} hint={form.delivery_text && !(form.delivery_days && form.delivery_text.includes(form.delivery_days)) ? `Na mensagem: "${form.delivery_text}"` : undefined}>
             <input id="days" className={missing(form.delivery_days || form.delivery_date)} inputMode="numeric" value={form.delivery_days} onChange={(e) => set('delivery_days', e.target.value)} placeholder="Não identificado" />
           </Field>
           <Field id="ddate" label="ou data de entrega" error={errors.delivery_date}>

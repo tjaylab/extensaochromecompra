@@ -38,10 +38,15 @@
     },
     action: { setBadgeText: async () => {}, setBadgeBackgroundColor: async () => {} },
     runtime: { sendMessage: async () => {}, onMessage: { addListener() {} } },
+    // Simulates an open WhatsApp tab: set window.__conversation = [{ direction, author, time, text }, …]
+    tabs: {
+      query: async () => (window.__conversation ? [{ id: 1, active: true }] : []),
+      sendMessage: async () => ({ contactName: window.__contactName ?? null, contactPhone: window.__contactPhone ?? null, conversation: window.__conversation ?? [] }),
+    },
   };
   // Simulates the WhatsApp content script: __capture('Consigo 30 fontes…', 'Carlos (Microsemi)', '+55 11 97000-1234')
   window.__capture = (text, contactName = null, contactPhone = null) =>
     chrome.storage.session.set({
-      pendingCapture: { id: String(Date.now()), text, contactName, contactPhone, capturedAt: Date.now() },
+      pendingCapture: { id: String(Date.now()), mode: 'selection', text, conversation: window.__conversation ?? null, contactName, contactPhone, capturedAt: Date.now() },
     });
 })();

@@ -1,6 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { betaZodOutputFormat } from '@anthropic-ai/sdk/helpers/beta/zod';
-import { ExtractionOutput, parseDecimal } from '@compras/shared';
+import { ExtractionOutput, parseDecimal, type ConversationMessage } from '@compras/shared';
 import type { Config } from '../config.js';
 import { HttpError } from '../lib/errors.js';
 import { buildUserMessage, EXTRACTION_SYSTEM_PROMPT } from './prompt.js';
@@ -13,7 +13,15 @@ export interface ExtractionResult {
   outputTokens: number | null;
 }
 
-export type Extractor = (input: { text: string; contactName?: string | null; today: string }) => Promise<ExtractionResult>;
+export interface ExtractionInput {
+  /** The buyer's selection ('' when capturing the whole conversation). */
+  text: string;
+  conversation?: ConversationMessage[] | null;
+  contactName?: string | null;
+  today: string;
+}
+
+export type Extractor = (input: ExtractionInput) => Promise<ExtractionResult>;
 
 export function createExtractor(cfg: Config): Extractor {
   return cfg.EXTRACTION_MODE === 'mock' ? mockExtractor : claudeExtractor(cfg);
@@ -81,9 +89,11 @@ export function normalizeOutput(o: ExtractionOutput): ExtractionOutput {
     prazo_entrega_dias: o.prazo_entrega_dias != null && o.prazo_entrega_dias >= 0 ? Math.round(o.prazo_entrega_dias) : null,
     condicao_pagamento: clean(o.condicao_pagamento),
     validade_proposta: clean(o.validade_proposta),
+    mensagens_usadas: [...new Set(o.mensagens_usadas.filter((n) => Number.isInteger(n) && n > 0))].sort((a, b) => a - b),
     itens: o.itens
-      .filter((i) => i.descricao && i.descricao.trim())
-      .map((i) => ({ ...i, descricao: i.descricao.trim(), marca: clean(i.marca), sku: clean(i.sku), unidade: clean(i.unidade) })),
+      // Keep items without a product name when they carry numbers: the buyer fills the name in.
+      .filter((i) => (i.descricao ?? '').trim() || i.quantidade != null || i.valor_unitario != null || i.valor_total != null)
+      .map((i) => ({ ...i, descricao: (i.descricao ?? '').trim(), marca: clean(i.marca), sku: clean(i.sku), unidade: clean(i.unidade) })),
   };
 }
 
@@ -91,8 +101,20 @@ export function normalizeOutput(o: ExtractionOutput): ExtractionOutput {
  * Local stand-in used when no Anthropic key is configured (development and tests).
  * Handles simple one-item messages like "Consigo 30 fontes Microsemi por USD 111,46 cada. Prazo de 45 dias. Pagamento 28 dias."
  */
-export const mockExtractor: Extractor = async ({ text }) => {
+export const mockExtractor: Extractor = async ({ text, conversation }) => {
   const started = Date.now();
+  // With a conversation and no selection, use the supplier's last message that carries a number.
+  let used: number[] = [];
+  if (!text.trim() && conversation?.length) {
+    const idx = conversation
+      .map((m, i) => ({ m, i }))
+      .reverse()
+      .find(({ m }) => m.direction === 'in' && /\d/.test(m.text))?.i;
+    if (idx != null) {
+      text = conversation[idx]!.text;
+      used = [idx + 1];
+    }
+  }
   const t = text.replace(/\s+/g, ' ');
   const currency = /US\$|USD|d[óo]lar/i.test(t) ? 'USD' : /€|EUR|euro/i.test(t) ? 'EUR' : /R\$|reais/i.test(t) ? 'BRL' : null;
   const price = t.match(/(?:por|a|R\$|US\$|USD|EUR|€)\s*(?:R\$|US\$|USD|EUR|€)?\s*([\d.,]+\d)\s*(?:cada|a unidade|\/un|por unidade)?/i);
@@ -127,6 +149,7 @@ export const mockExtractor: Extractor = async ({ text }) => {
       validade_proposta: null,
       itens: items,
       campos_ambiguos: [],
+      mensagens_usadas: used,
     },
     model: 'mock',
     latencyMs: Date.now() - started,

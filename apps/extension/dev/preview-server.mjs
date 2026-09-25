@@ -7,7 +7,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const root = path.resolve(here, '../.output/chrome-mv3');
+const root = path.resolve(here, '../.output', process.env.PREVIEW_BUILD ?? 'chrome-mv3');
 const port = Number(process.env.PORT ?? 5174);
 const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.png': 'image/png', '.svg': 'image/svg+xml' };
 

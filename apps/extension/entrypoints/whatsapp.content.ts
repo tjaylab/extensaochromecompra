@@ -1,9 +1,10 @@
 import { defineContentScript } from 'wxt/utils/define-content-script';
-import type { CaptureMessage, ContactRequest, ContactResponse } from '../lib/capture';
-import { isInConversation, readContact } from '../lib/whatsapp-dom';
+import type { CaptureMessage, ContactRequest, ContactResponse, ConversationRequest, ConversationResponse } from '../lib/capture';
+import { isInConversation, readContact, readConversation } from '../lib/whatsapp-dom';
 
 // Shows a floating "Registrar cotação" button next to text selected inside the open conversation.
-// Reads only the selected text and the open contact's name/phone; never other chats.
+// Reads only the open conversation (selected text, its recent messages and the contact), and only
+// when the buyer clicks; never other chats.
 
 export default defineContentScript({
   matches: ['https://web.whatsapp.com/*'],
@@ -58,15 +59,22 @@ export default defineContentScript({
 
     button.addEventListener('click', () => {
       if (!selectedText) return;
-      const msg: CaptureMessage = { type: 'capture', capture: { text: selectedText, capturedAt: Date.now(), ...readContact() } };
+      // The recent messages go along as context: the selection may miss the quantity or a later correction.
+      const msg: CaptureMessage = {
+        type: 'capture',
+        capture: { mode: 'selection', text: selectedText, conversation: readConversation(), capturedAt: Date.now(), ...readContact() },
+      };
       chrome.runtime.sendMessage(msg).catch(() => {});
       hide();
       window.getSelection()?.removeAllRanges();
     });
 
-    // Used by the right-click menu, which only knows the selected text.
-    chrome.runtime.onMessage.addListener((msg: ContactRequest, _sender, sendResponse: (r: ContactResponse) => void) => {
-      if (msg?.type === 'get-contact') sendResponse(readContact());
-    });
+    // Used by the right-click menu and the side panel's "Registrar da conversa aberta".
+    chrome.runtime.onMessage.addListener(
+      (msg: ContactRequest | ConversationRequest, _sender, sendResponse: (r: ContactResponse | ConversationResponse) => void) => {
+        if (msg?.type === 'get-contact') sendResponse(readContact());
+        if (msg?.type === 'get-conversation') sendResponse({ ...readContact(), conversation: readConversation() });
+      },
+    );
   },
 });

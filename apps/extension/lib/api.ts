@@ -1,5 +1,6 @@
 import type {
   ComparisonDTO,
+  ConversationMessage,
   CreateQuoteInput,
   CreateRequisitionInput,
   ExtractionResponse,
@@ -65,7 +66,8 @@ export const api = {
   saveOmie: (app_key: string, app_secret: string) => request<{ status: string; checked_at: string }>('PUT', '/v1/company/omie-credentials', { app_key, app_secret }),
   checkOmie: () => request<{ status: string; checked_at: string; message: string | null }>('POST', '/v1/company/omie-check'),
 
-  extract: (body: { text: string; contact_name?: string | null; contact_phone?: string | null }) => request<ExtractionResponse>('POST', '/v1/extractions', body),
+  extract: (body: { text: string; conversation?: ConversationMessage[] | null; contact_name?: string | null; contact_phone?: string | null }) =>
+    request<ExtractionResponse>('POST', '/v1/extractions', body),
 
   suppliers: (q?: string) => request<SupplierDTO[]>('GET', `/v1/suppliers${qs({ q })}`),
   updateSupplier: (id: string, body: Partial<Pick<SupplierDTO, 'name' | 'phone' | 'cnpj' | 'email'>>) => request<SupplierDTO>('PATCH', `/v1/suppliers/${id}`, body),

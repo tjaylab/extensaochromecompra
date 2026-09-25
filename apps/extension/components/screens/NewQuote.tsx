@@ -12,7 +12,16 @@ export function NewQuote() {
   const interpret = () =>
     nav.replace({
       name: 'review',
-      capture: { id: newCaptureId(), text: text.trim(), contactName: contact.trim() || null, contactPhone: null, capturedAt: startedAt.current, origin: 'manual' },
+      capture: {
+        id: newCaptureId(),
+        mode: 'selection',
+        text: text.trim(),
+        conversation: null,
+        contactName: contact.trim() || null,
+        contactPhone: null,
+        capturedAt: startedAt.current,
+        origin: 'manual',
+      },
     });
 
   return (

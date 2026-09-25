@@ -1,4 +1,4 @@
-import { todayIso, type ExtractionRequest, type ExtractionResponse } from '@compras/shared';
+import { formatConversation, todayIso, type ConversationMessage, type ExtractionRequest, type ExtractionResponse } from '@compras/shared';
 import type { AppContext, Member } from '../context.js';
 import { extractions } from '../db/schema.js';
 import { HttpError } from '../lib/errors.js';
@@ -19,13 +19,16 @@ function rateLimit(userId: string) {
 
 export async function runExtraction(ctx: AppContext, member: Member, input: ExtractionRequest): Promise<ExtractionResponse> {
   rateLimit(member.userId);
-  const result = await ctx.extractor({ text: input.text, contactName: input.contact_name, today: todayIso() });
+  const conversation = input.conversation?.filter((m) => m.text.trim()) ?? null;
+  const result = await ctx.extractor({ text: input.text, conversation, contactName: input.contact_name, today: todayIso() });
+  // Everything sent to the model is kept on the extraction (audit and quality review).
+  const sent = [conversation?.length ? formatConversation(conversation) : null, input.text ? `Seleção: ${input.text}` : null].filter(Boolean).join('\n\n');
   const [row] = await ctx.db
     .insert(extractions)
     .values({
       companyId: member.companyId,
       userId: member.userId,
-      sourceText: input.text,
+      sourceText: sent,
       contactName: input.contact_name ?? null,
       contactPhone: input.contact_phone ?? null,
       output: result.output,
@@ -47,5 +50,25 @@ export async function runExtraction(ctx: AppContext, member: Member, input: Extr
     entityId: row.id,
     data: { latency_ms: result.latencyMs, model: result.model, items: result.output.itens.length },
   });
-  return { extraction_id: row.id, data: result.output, supplier_match: supplierMatch, latency_ms: result.latencyMs };
+  return {
+    extraction_id: row.id,
+    data: result.output,
+    source_text: sourceExcerpt(input.text, conversation, result.output.mensagens_usadas),
+    supplier_match: supplierMatch,
+    latency_ms: result.latencyMs,
+  };
+}
+
+/**
+ * The original text the quote keeps: the selection when there is one, otherwise the messages the model
+ * says it used (never the whole conversation, which may hold unrelated talk).
+ */
+export function sourceExcerpt(selection: string, conversation: ConversationMessage[] | null, used: number[]): string {
+  const valid = used.filter((n) => conversation && n <= conversation.length);
+  if (selection.trim()) {
+    const context = conversation && valid.length ? formatConversation(conversation, { only: valid }) : '';
+    return context && !context.includes(selection.trim()) ? `${selection.trim()}\n\nContexto da conversa:\n${context}` : selection.trim();
+  }
+  if (conversation?.length) return formatConversation(conversation, valid.length ? { only: valid } : {});
+  return '';
 }
