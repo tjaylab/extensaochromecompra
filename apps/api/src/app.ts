@@ -57,7 +57,7 @@ export async function buildApp(opts: BuildOptions) {
       if (!origin) return cb(null, true); // curl, server-to-server
       if (allowed.length ? allowed.includes(origin) : origin.startsWith('chrome-extension://')) return cb(null, true);
       if (cfg.NODE_ENV !== 'production' && /^http:\/\/localhost(:\d+)?$/.test(origin)) return cb(null, true);
-      cb(new Error('Origin not allowed'), false);
+      cb(null, false); // no CORS headers: the browser blocks the call
     },
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
   });
