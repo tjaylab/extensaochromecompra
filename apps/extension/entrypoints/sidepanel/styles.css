@@ -137,3 +137,8 @@ table.cmp .missing-value { color: #8a4a07; font-style: italic; }
 .tab { height: 42px; padding: 0 14px; border: none; background: none; font-size: 14px; font-weight: 500; color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -1px; }
 .tab:hover { color: var(--ink); }
 .tab[aria-selected='true'] { color: var(--accent-ink); border-bottom-color: var(--accent); font-weight: 600; }
+
+.collapse-toggle { display: flex; align-items: center; justify-content: space-between; width: 100%; padding: 6px 0; border: none; border-top: 1px solid #eeeae3; background: none; font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; text-align: left; }
+.collapse-toggle:hover { color: var(--ink); }
+.collapse-icon { transition: transform .15s ease; }
+.collapse-toggle[aria-expanded='false'] .collapse-icon { transform: rotate(-90deg); }

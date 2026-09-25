@@ -24,7 +24,7 @@ export interface Capture {
 export type CaptureMessage = { type: 'capture'; capture: Omit<Capture, 'id'> };
 export type ContactRequest = { type: 'get-contact' };
 export type ContactResponse = { contactName: string | null; contactPhone: string | null };
-export type ConversationRequest = { type: 'get-conversation' };
+export type ConversationRequest = { type: 'get-conversation'; hours?: number };
 export type ConversationResponse = ContactResponse & { conversation: ConversationMessage[] };
 export type ImageRequest = { type: 'get-image'; src: string };
 export type ImageResponse = ConversationResponse & { image: Attachment | null; error?: string };
@@ -71,6 +71,9 @@ export const SUGGESTION_KEY = 'suggestion';
 export const PDF_MESSAGE = '__procuremate_pdf__';
 /** chrome.storage.local: read images and PDFs from recognized suppliers automatically (default on). */
 export const AUTO_READ_KEY = 'autoReadMedia';
+/** chrome.storage.local: how far back "Registrar da conversa aberta" reads, in hours (default 72). */
+export const HISTORY_HOURS_KEY = 'historyHours';
+export const DEFAULT_HISTORY_HOURS = 72;
 
 export const PENDING_CAPTURE_KEY = 'pendingCapture';
 /** Set by the service worker when a capture fails (e.g. an image it could not read). */

@@ -3,7 +3,7 @@ import { formatCnpj, formatMoney, isoToBr, QUOTE_STATUS_LABEL, type SupplierCont
 import { api } from '../lib/api';
 import { ACTIVE_CONTACT_KEY, type ActiveContact, type ContactResponse } from '../lib/capture';
 import { MonthlyBars, PriceHistory } from './charts';
-import { ErrorBanner, Spinner, StatusBadge, useNav } from './ui';
+import { Collapsible, ErrorBanner, Spinner, StatusBadge, useNav } from './ui';
 
 /** Follows the conversation open in WhatsApp Web (the content script reports every switch). */
 function useActiveContact(): ContactResponse | null {
@@ -137,12 +137,15 @@ export function SupplierPanel() {
             />
           </div>
 
-          {ctx.omie.orders_12m > 0 && <MonthlyBars data={ctx.omie.monthly} />}
-          {!!ctx.omie.price_history.length && <PriceHistory series={ctx.omie.price_history} />}
+          {ctx.omie.orders_12m > 0 && (
+            <Collapsible id="charts" title="Gráficos">
+              <MonthlyBars data={ctx.omie.monthly} />
+              {!!ctx.omie.price_history.length && <PriceHistory series={ctx.omie.price_history} />}
+            </Collapsible>
+          )}
 
           {!!ctx.omie.recent_orders.length && (
-            <div className="stack" style={{ gap: 6 }}>
-              <span className="small muted">Últimos pedidos no Omie</span>
+            <Collapsible id="orders" title="Últimos pedidos no Omie">
               {ctx.omie.recent_orders.map((o, i) => (
                 <div key={`${o.number}-${i}`} className="row-between small">
                   <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -151,12 +154,11 @@ export function SupplierPanel() {
                   <span className="mono" style={{ whiteSpace: 'nowrap' }}>{formatMoney(o.total, 'BRL')}</span>
                 </div>
               ))}
-            </div>
+            </Collapsible>
           )}
 
           {!!ctx.quotes.recent.length && (
-            <div className="stack" style={{ gap: 6 }}>
-              <span className="small muted">Últimas cotações</span>
+            <Collapsible id="quotes" title="Últimas cotações">
               {ctx.quotes.recent.map((q) => (
                 <button key={q.id} type="button" className="row-between small" style={{ border: 'none', background: 'none', padding: 0, textAlign: 'left' }} onClick={() => nav.go({ name: 'quote', id: q.id })}>
                   <span className="mono">{q.number} · {isoToBr(q.date)}</span>
@@ -166,7 +168,7 @@ export function SupplierPanel() {
                   </span>
                 </button>
               ))}
-            </div>
+            </Collapsible>
           )}
 
           {!ctx.omie.available && <span className="small muted">Histórico do Omie indisponível no momento.</span>}

@@ -54,7 +54,8 @@ export const ConversationMessage = z.object({
 });
 export type ConversationMessage = z.infer<typeof ConversationMessage>;
 
-export const MAX_CONVERSATION_CHARS = 16_000;
+// Several days of conversation (see the extension's history setting).
+export const MAX_CONVERSATION_CHARS = 60_000;
 
 export const ATTACHMENT_TYPES = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp', 'image/gif'] as const;
 export const MAX_ATTACHMENT_BYTES = 8 * 1024 * 1024;
@@ -75,7 +76,7 @@ export const ExtractionRequest = z
     /** The buyer's selection. Optional when a conversation or an attachment is sent. */
     text: z.string().trim().max(4000).default(''),
     /** Recent messages of the open conversation, oldest first. */
-    conversation: z.array(ConversationMessage).max(80).nullish(),
+    conversation: z.array(ConversationMessage).max(400).nullish(),
     attachments: z.array(Attachment).max(3, 'Envie no máximo 3 arquivos por cotação').nullish(),
     contact_name: z.string().max(200).nullish(),
     contact_phone: z.string().max(40).nullish(),

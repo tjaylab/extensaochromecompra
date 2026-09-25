@@ -61,7 +61,7 @@ describe('POST /v1/extractions with a conversation', () => {
   });
 
   it('rejects conversations that are too long', async () => {
-    const long = Array.from({ length: 10 }, () => ({ direction: 'in', text: 'x'.repeat(2000) }));
+    const long = Array.from({ length: 25 }, () => ({ direction: 'in', text: 'x'.repeat(3000) }));
     const r = await user().post('/v1/extractions', { conversation: long });
     expect(r.status).toBe(400);
     expect(r.body.error.message).toContain('Conversa longa demais');

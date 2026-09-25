@@ -86,6 +86,7 @@ const paths: Record<string, ReactNode> = {
   ),
   trash: <path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13" />,
   send: <path d="M4 12l16-8-6 16-2-7z" />,
+  chevron: <path d="M6 9l6 6 6-6" />,
 };
 
 export function Icon({ name, size = 18, className }: { name: keyof typeof paths; size?: number; className?: string }) {
@@ -176,4 +177,32 @@ export function ErrorBanner({ message, onRetry }: { message: string; onRetry?: (
 
 export function StatusBadge({ status, label }: { status: string; label: string }) {
   return <span className={`badge badge-${status}`}>{label}</span>;
+}
+
+/** A section with a chevron to expand and collapse it. The choice is remembered per section. */
+export function Collapsible({ id, title, children, defaultOpen = true }: { id: string; title: string; children: ReactNode; defaultOpen?: boolean }) {
+  const key = `collapsed:${id}`;
+  const [open, setOpen] = useState(defaultOpen);
+  useEffect(() => {
+    chrome.storage.local.get(key).then((r) => typeof r[key] === 'boolean' && setOpen(!r[key]));
+  }, [key]);
+  const toggle = () => {
+    setOpen((o) => {
+      chrome.storage.local.set({ [key]: o }).catch(() => {});
+      return !o;
+    });
+  };
+  return (
+    <div className="stack" style={{ gap: 8 }}>
+      <button type="button" className="collapse-toggle" aria-expanded={open} aria-controls={`sec-${id}`} onClick={toggle}>
+        <span>{title}</span>
+        <Icon name="chevron" size={16} className="collapse-icon" />
+      </button>
+      {open && (
+        <div id={`sec-${id}`} className="stack" style={{ gap: 12 }}>
+          {children}
+        </div>
+      )}
+    </div>
+  );
 }

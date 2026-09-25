@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { isoToBr } from '@compras/shared';
-import { AUTO_READ_KEY } from '../../lib/capture';
+import { AUTO_READ_KEY, HISTORY_HOURS_KEY } from '../../lib/capture';
+import { historyHours } from '../../lib/whatsapp-tab';
 import { api } from '../../lib/api';
 import { ErrorBanner, Field, Screen, Spinner, useLoad, useSession } from '../ui';
 
@@ -15,6 +16,7 @@ export function Settings() {
         <span className="muted">{me.company!.name}</span>
         <button type="button" className="btn btn-secondary" style={{ alignSelf: 'flex-start' }} onClick={signOut}>Sair</button>
       </section>
+      <HistorySetting />
       <AutoReadSetting />
       <OmieSettings admin={admin} onChange={refresh} />
       {admin && <Team />}
@@ -210,6 +212,29 @@ function AutoReadSetting() {
           </span>
         </span>
       </label>
+    </section>
+  );
+}
+
+function HistorySetting() {
+  const [hours, setHours] = useState(72);
+  useEffect(() => {
+    historyHours().then(setHours);
+  }, []);
+  const change = (h: number) => {
+    setHours(h);
+    chrome.storage.local.set({ [HISTORY_HOURS_KEY]: h }).catch(() => {});
+  };
+  return (
+    <section className="card">
+      <span className="section-label">Leitura da conversa</span>
+      <Field id="history-hours" label="Período lido em “Registrar da conversa aberta”" hint="A extensão rola a conversa até cobrir o período. Períodos maiores levam alguns segundos a mais.">
+        <select id="history-hours" className="select" value={hours} onChange={(e) => change(Number(e.target.value))}>
+          <option value={24}>Últimas 24 horas</option>
+          <option value={72}>Últimas 72 horas</option>
+          <option value={168}>Últimos 7 dias</option>
+        </select>
+      </Field>
     </section>
   );
 }

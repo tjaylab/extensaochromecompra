@@ -14,7 +14,7 @@ import {
   PDF_MESSAGE,
 } from '../lib/capture';
 import { MessageWatch } from '../lib/message-watch';
-import { isInConversation, readContact, readConversation, readMessageRows } from '../lib/whatsapp-dom';
+import { HISTORY_LIMITS, isInConversation, loadHistory, readContact, readConversation, readMessageRows } from '../lib/whatsapp-dom';
 
 // Shows a floating "Registrar cotação" button next to text selected inside the open conversation.
 // Reads only the open conversation (selected text, its recent messages and the contact), and only
@@ -91,7 +91,18 @@ export default defineContentScript({
         sendResponse: (r: ContactResponse | ConversationResponse | ImageResponse) => void,
       ) => {
         if (msg?.type === 'get-contact') sendResponse(readContact());
-        if (msg?.type === 'get-conversation') sendResponse({ ...readContact(), conversation: readConversation() });
+        if (msg?.type === 'get-conversation') {
+          if (!msg.hours) {
+            sendResponse({ ...readContact(), conversation: readConversation() });
+            return;
+          }
+          // Load the last N hours (scrolling up if needed), then read them.
+          const since = Date.now() - msg.hours * 3600_000;
+          loadHistory(since)
+            .catch(() => false)
+            .then(() => sendResponse({ ...readContact(), conversation: readConversation(undefined, HISTORY_LIMITS, since) }));
+          return true; // async sendResponse
+        }
         if (msg?.type === 'get-image') {
           // Right-click > "Registrar cotação desta imagem": the image is a blob: URL only this page can read.
           readImage(msg.src).then(

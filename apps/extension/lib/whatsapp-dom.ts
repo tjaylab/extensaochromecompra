@@ -110,20 +110,51 @@ export function readMessageRows(root: ParentNode | null = conversationRoot()): M
 }
 
 /**
- * The most recent text messages loaded in the open conversation, oldest first.
- * Only what WhatsApp has rendered: older messages need the buyer to scroll up first.
+ * Parses the time WhatsApp puts in each message ("10:47, 25/09/2026", or "10:47 AM, 9/25/2026" in US English)
+ * into epoch ms. Day/month order follows the page language. Returns null when it cannot tell.
  */
-export function readConversation(root: ParentNode | null = conversationRoot(), limits = CONVERSATION_LIMITS): ConversationMessage[] {
+export function parseMessageTime(time: string | null | undefined, lang = document.documentElement.lang || navigator.language): number | null {
+  if (!time) return null;
+  const hm = time.match(/(\d{1,2}):(\d{2})\s*([ap]\.?\s?m\.?)?/i);
+  const dmy = time.match(/(\d{1,2})[/.-](\d{1,2})[/.-](\d{2,4})/);
+  if (!hm || !dmy) return null;
+  const [a, b] = [Number(dmy[1]), Number(dmy[2])];
+  const year = Number(dmy[3]!.length === 2 ? `20${dmy[3]}` : dmy[3]);
+  // Month first in US English, unless the first number cannot be a month.
+  const monthFirst = /^en-us/i.test(lang) ? a <= 12 : b > 12;
+  const [day, month] = monthFirst ? [b, a] : [a, b];
+  let hour = Number(hm[1]);
+  const ampm = hm[3]?.toLowerCase().replace(/[.\s]/g, '');
+  if (ampm === 'pm' && hour < 12) hour += 12;
+  if (ampm === 'am' && hour === 12) hour = 0;
+  const d = new Date(year, month - 1, day, hour, Number(hm[2]));
+  return Number.isNaN(d.getTime()) || d.getMonth() !== month - 1 ? null : d.getTime();
+}
+
+/**
+ * Text messages loaded in the open conversation, oldest first: the most recent ones within the limits,
+ * and when `since` is given only those at or after it. Only what WhatsApp has rendered (see loadHistory).
+ */
+export function readConversation(
+  root: ParentNode | null = conversationRoot(),
+  limits: { maxMessages: number; maxChars: number } = CONVERSATION_LIMITS,
+  since?: number,
+): ConversationMessage[] {
   if (!root) return [];
   const all: ConversationMessage[] = [];
   for (const el of root.querySelectorAll<HTMLElement>(MESSAGE_SELECTOR)) {
     const meta = (el.getAttribute('data-pre-plain-text') ?? '').match(/^\[([^\]]+)\]\s*(.*?):\s*$/);
+    const time = meta?.[1]?.trim() || null;
+    if (since != null) {
+      const at = parseMessageTime(time);
+      if (at != null && at < since) continue;
+    }
     const textEl = (el.querySelector('.selectable-text') as HTMLElement | null) ?? el;
     let text = (textEl.innerText ?? textEl.textContent ?? '').trim();
     if (!text) continue;
     const row = el.closest('[data-id]') ?? el.parentElement;
     if (row?.querySelector('img[src^="blob:"]')) text = `[imagem] ${text}`;
-    all.push({ direction: directionOf(el), author: meta?.[2]?.trim() || null, time: meta?.[1]?.trim() || null, text: text.slice(0, 3000) });
+    all.push({ direction: directionOf(el), author: meta?.[2]?.trim() || null, time, text: text.slice(0, 3000) });
   }
   const recent: ConversationMessage[] = [];
   let chars = 0;
@@ -133,4 +164,64 @@ export function readConversation(root: ParentNode | null = conversationRoot(), l
     recent.unshift(all[i]!);
   }
   return recent;
+}
+
+/** Limits for a history read (several days of conversation). */
+export const HISTORY_LIMITS = { maxMessages: 300, maxChars: 60_000 };
+
+/** The scrollable element that holds the message list (the one WhatsApp loads older messages into). */
+export function messageScroller(root: ParentNode | null = conversationRoot()): HTMLElement | null {
+  const first = root?.querySelector<HTMLElement>('[data-id]');
+  for (let el = first?.parentElement ?? null; el && el !== document.body; el = el.parentElement) {
+    const style = getComputedStyle(el);
+    if (/(auto|scroll)/.test(style.overflowY) && el.scrollHeight > el.clientHeight) return el;
+  }
+  return null;
+}
+
+function oldestLoadedTime(root: ParentNode | null): number | null {
+  for (const el of root?.querySelectorAll(MESSAGE_SELECTOR) ?? []) {
+    const t = parseMessageTime((el.getAttribute('data-pre-plain-text') ?? '').match(/^\[([^\]]+)\]/)?.[1]);
+    if (t != null) return t;
+  }
+  return null;
+}
+
+const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * Scrolls the conversation up until messages older than `since` are loaded (WhatsApp loads history as you
+ * scroll), then puts the scroll back where the buyer was. Stops after `timeoutMs` or when nothing more loads.
+ * Returns whether the whole period was reached.
+ */
+export async function loadHistory(since: number, opts: { timeoutMs?: number; stepWaitMs?: number } = {}): Promise<boolean> {
+  const root = conversationRoot();
+  const scroller = messageScroller(root);
+  if (!scroller) return false;
+  const timeoutMs = opts.timeoutMs ?? 15_000;
+  const stepWaitMs = opts.stepWaitMs ?? 700;
+  const fromBottom = scroller.scrollHeight - scroller.scrollTop;
+  const started = Date.now();
+  let reached = false;
+  let idle = 0;
+  try {
+    while (Date.now() - started < timeoutMs) {
+      const oldest = oldestLoadedTime(root);
+      if (oldest != null && oldest < since) {
+        reached = true;
+        break;
+      }
+      const before = root!.querySelectorAll('[data-id]').length;
+      scroller.scrollTop = 0;
+      scroller.dispatchEvent(new Event('scroll'));
+      await wait(stepWaitMs);
+      if (root!.querySelectorAll('[data-id]').length === before) {
+        if (++idle >= 3) break; // start of the conversation, or nothing more to load
+      } else idle = 0;
+    }
+  } finally {
+    // Back to where the buyer was, measured from the bottom (older messages were added above).
+    scroller.scrollTop = scroller.scrollHeight - fromBottom;
+  }
+  return reached;
 }

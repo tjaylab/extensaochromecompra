@@ -14,6 +14,7 @@ import {
   ACTIVE_CONTACT_KEY,
   CAPTURE_ERROR_KEY,
 } from '../lib/capture';
+import { historyHours } from '../lib/whatsapp-tab';
 
 const MENU_SELECTION = 'registrar-cotacao';
 const MENU_CONVERSATION = 'registrar-conversa';
@@ -68,8 +69,11 @@ export default defineBackground(() => {
     // Open first: sidePanel.open must run while the user gesture is still active.
     chrome.sidePanel.open({ tabId }).catch(() => {});
     const capturedAt = Date.now();
-    chrome.tabs
-      .sendMessage<{ type: 'get-conversation' }, ConversationResponse>(tabId, { type: 'get-conversation' })
+    // The whole-conversation option reads the configured period (scrolling up); a selection only needs recent context.
+    (isSelection ? Promise.resolve(undefined) : historyHours())
+      .then((hours) =>
+        chrome.tabs.sendMessage<{ type: 'get-conversation'; hours?: number }, ConversationResponse>(tabId, { type: 'get-conversation', hours }),
+      )
       .catch(() => null)
       .then((r) =>
         storeCapture({
@@ -83,7 +87,6 @@ export default defineBackground(() => {
       );
   });
 
-  // Floating "Registrar cotação" button in the conversation.
   // A possible proposal arrived in the open conversation: the side panel offers to register it.
   chrome.runtime.onMessage.addListener((msg: SuggestionMessage) => {
     if (msg?.type !== 'suggestion') return;
@@ -104,6 +107,7 @@ export default defineBackground(() => {
     chrome.storage.session.set({ [ACTIVE_CONTACT_KEY]: active }).catch(() => {});
   });
 
+  // Floating "Registrar cotação" button in the conversation.
   chrome.runtime.onMessage.addListener((msg: CaptureMessage, sender, sendResponse) => {
     if (msg?.type !== 'capture' || !sender.tab?.id) return;
     chrome.sidePanel
