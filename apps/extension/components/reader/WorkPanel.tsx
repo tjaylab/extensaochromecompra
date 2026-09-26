@@ -17,9 +17,12 @@ export function WorkPanel() {
       {who ? (
         <div className="row-between">
           <strong style={{ fontSize: 15 }}>{who}</strong>
-          <span className="live-pill">
-            <span className={`live-dot ${c!.busy ? 'busy' : ''}`} />
-            {c!.busy ? 'Analisando' : 'Lendo a conversa'}
+          <span className="row" style={{ gap: 8 }}>
+            <button type="button" className="btn-link small" onClick={r.reload} disabled={c!.busy}>Ler de novo</button>
+            <span className="live-pill">
+              <span className={`live-dot ${c!.busy ? 'busy' : ''}`} />
+              {c!.busy ? 'Analisando' : 'Lendo a conversa'}
+            </span>
           </span>
         </div>
       ) : (

@@ -10,6 +10,7 @@ import {
   type ContactResponse,
   type RowMediaResponse,
   type RowsLoadedMessage,
+  type RowsRequest,
   type Suggestion,
 } from '../../lib/capture';
 import { sendToWhatsApp } from '../../lib/whatsapp-tab';
@@ -54,6 +55,8 @@ interface Reader {
   openQuote: (key: string) => void;
   analyzeAnyway: () => void;
   addFiles: (files: Attachment[]) => void;
+  /** Reads again everything loaded in the open conversation. */
+  reload: () => void;
 }
 
 const ReaderContext = createContext<Reader | null>(null);
@@ -62,6 +65,8 @@ export const useReader = () => useContext(ReaderContext)!;
 const SCAN_DEBOUNCE_MS = 1200;
 const CONTEXT_BEFORE = 8;
 const MAX_ACTIVITIES = 10;
+/** Opening a chat with history on screen reads only its latest images and PDFs automatically. */
+const INITIAL_MEDIA = 2;
 const FILES_CHAT = 'arquivos';
 const storageKey = (chat: string) => `reader:${chat}`;
 const chatKeyOf = (c: ContactResponse) => c.contactName ?? c.contactPhone ?? '';
@@ -76,19 +81,22 @@ export function ReaderProvider({ children }: { children: ReactNode }) {
   const nav = useNav();
   const active = useActiveContact();
   const [chats, setChats] = useState<Record<string, ChatState>>({});
+  // The source of truth, updated synchronously: the async readers below read it right after writing.
+  // (A setState updater runs later, during render, so it can't be relied on for that.)
   const ref = useRef(chats);
-  ref.current = chats;
   const timers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const loaded = useRef<Set<string>>(new Set());
   const rescan = useRef<Set<string>>(new Set());
+  // One image or PDF at a time: WhatsApp hands over one document per click.
+  const mediaQueue = useRef<Promise<unknown>>(Promise.resolve());
 
-  const update = (key: string, contact: ContactResponse, fn: (s: ChatState) => ChatState) =>
-    setChats((prev) => {
-      const s = prev[key] ?? { key, contact, known: null, manual: false, messages: [], scanned: [], proposals: [], activities: [], busy: false };
-      const next = { ...prev, [key]: fn({ ...s, contact: contact.contactPhone || !s.contact.contactPhone ? contact : s.contact }) };
-      ref.current = next;
-      return next;
-    });
+  const update = (key: string, contact: ContactResponse, fn: (s: ChatState) => ChatState) => {
+    const prev = ref.current;
+    const s = prev[key] ?? { key, contact, known: null, manual: false, messages: [], scanned: [], proposals: [], activities: [], busy: false };
+    const next = { ...prev, [key]: fn({ ...s, contact: contact.contactPhone || !s.contact.contactPhone ? contact : s.contact }) };
+    ref.current = next;
+    setChats(next);
+  };
 
   const addActivity = (key: string, contact: ContactResponse, a: Omit<Activity, 'id' | 'at'> & { id?: string }) => {
     const id = a.id ?? newCaptureId();
@@ -165,6 +173,7 @@ export function ReaderProvider({ children }: { children: ReactNode }) {
     const priced = pending.some((m) => m.direction === 'in' && looksLikeProposal(m.text));
     if (!priced) {
       update(key, st.contact, (x) => ({ ...x, scanned: [...x.scanned, ...pending.map((m) => m.id!)] }));
+      addActivity(key, st.contact, { id: `idle:${key}`, kind: 'none', text: 'Nenhuma mensagem com preço até agora. Continuo acompanhando.', done: true });
       persist(key);
       return;
     }
@@ -215,7 +224,12 @@ export function ReaderProvider({ children }: { children: ReactNode }) {
   };
 
   /** A received image or PDF: read it (automatically for recognized suppliers, on click otherwise). */
-  const readMedia = async (key: string, contact: ContactResponse, m: RowsLoadedMessage['media'][number], force = false) => {
+  const readMedia = (key: string, contact: ContactResponse, m: RowsLoadedMessage['media'][number], force = false) => {
+    const run = mediaQueue.current.then(() => readMediaNow(key, contact, m, force)).catch(() => {});
+    mediaQueue.current = run;
+    return run;
+  };
+  const readMediaNow = async (key: string, contact: ContactResponse, m: RowsLoadedMessage['media'][number], force: boolean) => {
     const s = ref.current[key];
     if (s?.scanned.includes(m.id)) return;
     const label = m.kind === 'pdf' ? `o PDF "${m.name}"` : 'a imagem';
@@ -269,11 +283,18 @@ export function ReaderProvider({ children }: { children: ReactNode }) {
       update(key, msg.contact, (s) => {
         const have = new Set(s.messages.map((m) => m.id));
         const fresh = incoming.filter((m) => !have.has(m.id));
+        if (msg.position === 'initial') {
+          // A snapshot of what is on screen: its order wins; messages read before and no longer loaded stay first.
+          const now = new Set(incoming.map((m) => m.id));
+          return { ...s, messages: [...s.messages.filter((m) => !now.has(m.id)), ...incoming] };
+        }
         return { ...s, messages: msg.position === 'older' ? [...fresh, ...s.messages] : [...s.messages, ...fresh] };
       });
-      const unseen = incoming.filter((m) => !ref.current[key]!.scanned.includes(m.id!));
+      const scanned = ref.current[key]?.scanned ?? [];
+      const unseen = incoming.filter((m) => !scanned.includes(m.id!));
       if (unseen.length) {
         addActivity(key, msg.contact, {
+          ...(msg.position === 'initial' ? { id: `fetch:${key}` } : {}),
           kind: 'fetch',
           text: `${msg.position === 'older' ? 'Lendo mensagens anteriores' : msg.position === 'initial' ? 'Obtendo mensagens' : 'Nova mensagem'} de ${whoOf(msg.contact)} · ${unseen.length}`,
           snippets: unseen.slice(-3).map((m) => ({ direction: m.direction, text: m.text.slice(0, 90) })),
@@ -282,12 +303,13 @@ export function ReaderProvider({ children }: { children: ReactNode }) {
         schedule(key);
       }
     }
-    for (const m of msg.media) if (m.direction === 'in') readMedia(key, msg.contact, m);
+    const received = msg.media.filter((m) => m.direction === 'in');
+    for (const m of msg.position === 'initial' ? received.slice(-INITIAL_MEDIA) : received) readMedia(key, msg.contact, m);
   };
 
   useEffect(() => {
     const listener = (msg: RowsLoadedMessage) => {
-      if (msg?.type === 'rows-loaded') onRows(msg);
+      if (msg?.type === 'rows-loaded') onRows(msg).catch((e) => console.error('[ProcureMate] leitura', e));
     };
     chrome.runtime.onMessage.addListener(listener);
     // PDFs the buyer downloaded in WhatsApp (read without attaching).
@@ -303,6 +325,31 @@ export function ReaderProvider({ children }: { children: ReactNode }) {
       chrome.storage.onChanged.removeListener(onStorage);
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /** Asks the WhatsApp tab for every message loaded in the open conversation. */
+  const sync = async (contact: ContactResponse) => {
+    const key = chatKeyOf(contact);
+    if (!key) return;
+    const fail = (text: string) =>
+      addActivity(key, contact, { id: `sync:${key}`, kind: 'error', text, done: true, action: { label: 'Ler de novo', run: () => sync(contact) } });
+    let r: RowsLoadedMessage | undefined;
+    try {
+      r = await sendToWhatsApp<RowsLoadedMessage>({ type: 'get-rows' } satisfies RowsRequest);
+    } catch (e) {
+      const text = e instanceof Error ? e.message : String(e);
+      return fail(/Receiving end|establish connection/i.test(text) ? 'Recarregue a aba do WhatsApp Web (F5) para eu voltar a ler as mensagens.' : text);
+    }
+    if (!r) return fail('Não consegui falar com o WhatsApp Web. Recarregue a aba (F5).');
+    if (chatKeyOf(r.contact) !== key) return; // the buyer switched chats meanwhile
+    update(key, contact, (s) => ({ ...s, activities: s.activities.filter((a) => a.id !== `sync:${key}`) }));
+    if (!r.messages.length && !r.media.length) return fail('Não encontrei mensagens nesta conversa. Role um pouco a conversa ou clique para tentar de novo.');
+    await onRows(r);
+  };
+
+  const activeKey = active ? chatKeyOf(active) : '';
+  useEffect(() => {
+    if (active && activeKey) sync(active).catch((e) => console.error('[ProcureMate] leitura', e));
+  }, [activeKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const readFile = async (key: string, contact: ContactResponse, att: Attachment, source: ProposalView['source']) => {
     const label = att.media_type === 'application/pdf' ? `o PDF "${att.name ?? 'documento'}"` : `a imagem "${att.name ?? ''}"`;
@@ -323,7 +370,9 @@ export function ReaderProvider({ children }: { children: ReactNode }) {
 
   // Files dropped with no conversation open are read under a chat of their own.
   const currentKey = active ? chatKeyOf({ contactName: active.contactName, contactPhone: active.contactPhone }) : FILES_CHAT;
-  const current = chats[currentKey] ?? null;
+  const current: ChatState | null =
+    chats[currentKey] ??
+    (active ? { key: currentKey, contact: active, known: null, manual: false, messages: [], scanned: [], proposals: [], activities: [], busy: false } : null);
   const find = (pkey: string) => (current ? current.proposals.find((p) => p.key === pkey) : undefined);
   const setProposal = (pkey: string, patch: Partial<ProposalView> | null) => {
     if (!current) return;
@@ -381,6 +430,7 @@ export function ReaderProvider({ children }: { children: ReactNode }) {
       const key = current?.key ?? FILES_CHAT;
       for (const f of files) readFile(key, contact, f, f.media_type === 'application/pdf' ? 'pdf' : 'file');
     },
+    reload: () => active && sync(active),
   };
 
   return <ReaderContext.Provider value={reader}>{children}</ReaderContext.Provider>;

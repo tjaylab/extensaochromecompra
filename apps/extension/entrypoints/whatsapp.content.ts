@@ -16,6 +16,7 @@ import {
   type RowMediaRequest,
   type RowMediaResponse,
   type RowsLoadedMessage,
+  type RowsRequest,
   type SuggestionMessage,
 } from '../lib/capture';
 import { RowReporter } from '../lib/row-reporter';
@@ -122,11 +123,13 @@ export default defineContentScript({
     // ---------------------------------------------------------------------
     chrome.runtime.onMessage.addListener(
       (
-        msg: ContactRequest | ConversationRequest | ImageRequest | RowMediaRequest | AttachFileRequest,
+        msg: ContactRequest | ConversationRequest | ImageRequest | RowMediaRequest | AttachFileRequest | RowsRequest,
         _sender,
-        sendResponse: (r: ContactResponse | ConversationResponse | ImageResponse | RowMediaResponse | { ok: boolean }) => void,
+        sendResponse: (r: ContactResponse | ConversationResponse | ImageResponse | RowMediaResponse | RowsLoadedMessage | { ok: boolean }) => void,
       ) => {
         if (msg?.type === 'get-contact') sendResponse(readContact());
+        // The app opened (or switched chats) after the rows were reported: it asks for what is on screen now.
+        if (msg?.type === 'get-rows') sendResponse(rowsMessage('initial', readMessageRows()));
         if (msg?.type === 'get-conversation') {
           if (!msg.hours) {
             sendResponse({ ...readContact(), conversation: readConversation() });
@@ -186,20 +189,22 @@ export default defineContentScript({
 
     const reporter = new RowReporter();
     const toMessage = (r: MessageRow) => ({ id: r.id, direction: r.direction, author: r.author ?? null, time: r.time ?? null, text: r.text.slice(0, 3000) });
+    function rowsMessage(position: RowsLoadedMessage['position'], rows: MessageRow[]): RowsLoadedMessage {
+      return {
+        type: 'rows-loaded',
+        contact: readContact(),
+        position,
+        messages: rows.filter((r) => r.text && !r.image && !r.pdfName).map(toMessage),
+        media: rows
+          .filter((r) => r.image || r.pdfName)
+          .map((r) => ({ id: r.id, kind: r.pdfName ? ('pdf' as const) : ('image' as const), name: r.pdfName, direction: r.direction, caption: r.text })),
+      };
+    }
     const report = () => {
-      const contact = readContact();
-      const chat = readContactFromPage().contactName ?? contact.contactPhone ?? '';
+      const chat = readContactFromPage().contactName ?? readContact().contactPhone ?? '';
       if (!chat) return;
       for (const batch of reporter.scan(chat, readMessageRows())) {
-        const msg: RowsLoadedMessage = {
-          type: 'rows-loaded',
-          contact,
-          position: batch.position,
-          messages: batch.rows.filter((r) => r.text && !r.image && !r.pdfName).map(toMessage),
-          media: batch.rows
-            .filter((r) => r.image || r.pdfName)
-            .map((r) => ({ id: r.id, kind: r.pdfName ? ('pdf' as const) : ('image' as const), name: r.pdfName, direction: r.direction, caption: r.text })),
-        };
+        const msg = rowsMessage(batch.position, batch.rows);
         if (msg.messages.length || msg.media.length) chrome.runtime.sendMessage(msg).catch(() => {});
       }
     };

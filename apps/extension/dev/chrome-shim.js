@@ -40,10 +40,12 @@
     },
     action: { setBadgeText: async () => {}, setBadgeBackgroundColor: async () => {} },
     runtime: { id: 'dev', getURL: (p) => location.origin + (p.startsWith('/') ? p : '/' + p), sendMessage: async () => {}, onMessage: { addListener: (l) => msgListeners.push(l), removeListener: (l) => msgListeners.splice(msgListeners.indexOf(l), 1) } },
-    // Simulates an open WhatsApp tab: set window.__conversation = [{ direction, author, time, text }, …]
+    // Simulates an open WhatsApp tab (window.__screen = messages loaded in the open chat, for get-rows): set window.__conversation = [{ direction, author, time, text }, …]
     tabs: {
       query: async () => (window.__conversation ? [{ id: 1, active: true }] : []),
-      sendMessage: async (_id, msg) => msg?.type === 'attach-file' ? (console.log('[shim] attach-file', msg.name), { ok: true }) : ({ contactName: window.__contactName ?? null, contactPhone: window.__contactPhone ?? null, conversation: window.__conversation ?? [] }),
+      sendMessage: async (_id, msg) => msg?.type === 'get-rows'
+        ? { type: 'rows-loaded', contact: { contactName: window.__contactName ?? null, contactPhone: window.__contactPhone ?? null }, position: 'initial', messages: (window.__screen ?? []).map((m) => ({ author: null, time: null, ...m })), media: [] }
+        : msg?.type === 'attach-file' ? (console.log('[shim] attach-file', msg.name), { ok: true }) : ({ contactName: window.__contactName ?? null, contactPhone: window.__contactPhone ?? null, conversation: window.__conversation ?? [] }),
     },
   };
   // Simulates the WhatsApp content script: __capture('Consigo 30 fontes…', 'Carlos (Microsemi)', '+55 11 97000-1234')

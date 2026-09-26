@@ -115,6 +115,9 @@ export interface RowsLoadedMessage {
   media: { id: string; kind: 'image' | 'pdf'; name: string | null; direction: 'in' | 'out'; caption: string }[];
 }
 
+/** The app asks for every message currently loaded in the open conversation (answered with a RowsLoadedMessage). */
+export type RowsRequest = { type: 'get-rows' };
+
 export type RowMediaRequest = { type: 'get-row-image'; id: string } | { type: 'read-row-pdf'; id: string };
 export type RowMediaResponse = { attachment: Attachment | null; error?: string };
 
