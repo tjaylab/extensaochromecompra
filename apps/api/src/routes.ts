@@ -17,6 +17,7 @@ import type { AppContext, Member } from './context.js';
 import { badRequest, HttpError } from './lib/errors.js';
 import { listPaymentTerms, searchProducts, syncPaymentTerms, syncProducts } from './services/catalog.js';
 import { checkOmie, createCompany, getMe, inviteMember, listMembers, resolveMember, saveOmieCredentials } from './services/companies.js';
+import { privacyHtml } from './pages/privacy.js';
 import { adminListCompanies, adminUpdateSubscription, checkout, getBilling, handleAsaasWebhook } from './services/billing.js';
 import { logEvent } from './services/events.js';
 import { runExtraction, runScan } from './services/extractions.js';
@@ -55,6 +56,9 @@ const Id = z.object({ id: z.string().uuid() });
 
 export function registerRoutes(app: FastifyInstance, ctx: AppContext) {
   app.get('/health', async () => ({ ok: true }));
+
+  // Public privacy policy (Chrome Web Store listing, LGPD).
+  app.get('/privacidade', async (_req, reply) => reply.type('text/html; charset=utf-8').header('Cache-Control', 'public, max-age=3600').send(privacyHtml));
 
   // --- Session and company -------------------------------------------------
   app.get('/v1/me', async (req) => getMe(ctx, req.user!, req.member));

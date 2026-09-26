@@ -139,3 +139,13 @@ describe('Asaas live client', () => {
     await expect(new LiveAsaas('k', 'production', http).updateSubscription('x', { value: 1, cycle: 'monthly', billingType: 'UNDEFINED', description: '' })).rejects.toMatchObject({ status: 404 });
   });
 });
+
+describe('privacy policy page', () => {
+  it('is public and names the controller', async () => {
+    const r = await t.app.inject({ method: 'GET', url: '/privacidade' });
+    expect(r.statusCode).toBe(200);
+    expect(r.headers['content-type']).toMatch(/text\/html/);
+    expect(r.body).toContain('65.684.379/0001-41');
+    expect(r.body).toContain('thiago.soares@tizzedigital.com');
+  });
+});
