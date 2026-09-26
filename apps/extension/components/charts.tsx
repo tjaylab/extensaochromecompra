@@ -53,24 +53,6 @@ function Tooltip({ x, children }: { x: number; children: ReactNode }) {
   );
 }
 
-function DataTable({ head, rows }: { head: string[]; rows: (string | number)[][] }) {
-  return (
-    <details>
-      <summary className="small muted" style={{ cursor: 'pointer' }}>Ver dados em tabela</summary>
-      <table className="small" style={{ width: '100%', borderCollapse: 'collapse', marginTop: 6 }}>
-        <thead>
-          <tr>{head.map((h) => <th key={h} style={{ textAlign: 'left', fontWeight: 500, color: AXIS_TEXT, padding: '2px 0' }}>{h}</th>)}</tr>
-        </thead>
-        <tbody>
-          {rows.map((r, i) => (
-            <tr key={i}>{r.map((c, j) => <td key={j} className={j ? 'mono' : undefined} style={{ padding: '2px 0' }}>{c}</td>)}</tr>
-          ))}
-        </tbody>
-      </table>
-    </details>
-  );
-}
-
 // ---------------------------------------------------------------------------
 // Purchases per month: columns, one series
 // ---------------------------------------------------------------------------
@@ -144,7 +126,6 @@ export function MonthlyBars({ data }: { data: { month: string; total: number; or
           );
         })}
       </svg>
-      <DataTable head={['Mês', 'Total', 'Pedidos']} rows={data.map((d) => [monthLabel(d.month, true), formatMoney(d.total, 'BRL'), d.orders])} />
     </figure>
   );
 }
@@ -252,10 +233,6 @@ export function PriceHistory({ series }: { series: { description: string; points
           </svg>
         </>
       )}
-      <DataTable
-        head={['Data', 'Preço unit.', 'Qtd']}
-        rows={pts.map((p) => [isoToBr(p.date), formatMoney(p.unit_price, 'BRL'), p.quantity.toLocaleString('pt-BR')])}
-      />
     </figure>
   );
 }

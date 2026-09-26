@@ -38,3 +38,12 @@ export async function captureOpenConversation(opts: { scroll?: boolean } = {}): 
     capturedAt,
   };
 }
+
+/** Sends a request to the content script of the WhatsApp Web tab (the active one if several). */
+export async function sendToWhatsApp<T>(msg: object): Promise<T | undefined> {
+  if (!chrome.tabs?.query) return undefined;
+  const tabs = await chrome.tabs.query({ url: 'https://web.whatsapp.com/*' });
+  const tab = tabs.find((t) => t.active) ?? tabs[0];
+  if (!tab?.id) throw new Error('Abra o WhatsApp Web numa aba do Chrome.');
+  return chrome.tabs.sendMessage<object, T>(tab.id, msg);
+}

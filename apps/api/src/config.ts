@@ -26,6 +26,9 @@ const Env = z.object({
   // Comma-separated allowed origins, e.g. chrome-extension://abcdef... Empty = any chrome-extension:// origin.
   CORS_ORIGINS: z.string().optional(),
   LOG_LEVEL: z.string().default('info'),
+  // Optional: e-mail purchase orders to suppliers (resend.com). Without it the panel opens the buyer's e-mail app.
+  RESEND_API_KEY: z.string().optional(),
+  EMAIL_FROM: z.string().optional(), // e.g. "Compras Um Grau e Meio <compras@seudominio.com.br>"
 });
 
 export type Config = z.infer<typeof Env> & { EXTRACTION_MODE: 'claude' | 'mock' };

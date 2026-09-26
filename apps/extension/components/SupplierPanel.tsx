@@ -3,6 +3,7 @@ import { formatCnpj, formatMoney, isoToBr, QUOTE_STATUS_LABEL, type SupplierCont
 import { api } from '../lib/api';
 import { ACTIVE_CONTACT_KEY, type ActiveContact, type ContactResponse } from '../lib/capture';
 import { MonthlyBars, PriceHistory } from './charts';
+import { PhoneMismatch, RegisterInOmie, SupplierSearch } from './SupplierActions';
 import { Collapsible, ErrorBanner, Spinner, StatusBadge, useNav } from './ui';
 
 /** Follows the conversation open in WhatsApp Web (the content script reports every switch). */
@@ -36,8 +37,14 @@ export function SupplierPanel() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [linking, setLinking] = useState(false);
+  const [mode, setMode] = useState<'view' | 'search' | 'register'>('view');
+  const done = (c: SupplierContextDTO) => {
+    setCtx(c);
+    setMode('view');
+  };
 
   useEffect(() => {
+    setMode('view');
     if (!contact) return setCtx(null);
     let alive = true;
     setLoading(true);
@@ -98,7 +105,10 @@ export function SupplierPanel() {
       {error && <ErrorBanner message={error} />}
       {loading && !ctx && <Spinner label="Buscando histórico…" />}
 
-      {ctx && !recognized && (
+      {ctx && mode === 'search' && <SupplierSearch contact={contact} onLinked={done} onCancel={() => setMode('view')} />}
+      {ctx && mode === 'register' && <RegisterInOmie contact={contact} ctx={ctx} onDone={done} onCancel={() => setMode('view')} />}
+
+      {ctx && mode === 'view' && !recognized && (
         <div className="stack">
           {ctx.candidates.length ? (
             <>
@@ -112,16 +122,22 @@ export function SupplierPanel() {
             </>
           ) : (
             <span className="small muted">
-              {ctx.omie.available
-                ? 'Contato não encontrado nos fornecedores do Omie. Ele será cadastrado quando você registrar a primeira cotação.'
-                : 'Conecte o Omie em Configurações para ver o histórico de compras.'}
+              {ctx.omie.available ? 'Não encontrei este contato entre os fornecedores do Omie.' : 'Conecte o Omie em Configurações para ver o histórico de compras.'}
             </span>
           )}
+          <div className="row">
+            <button type="button" className="btn btn-secondary" onClick={() => setMode('search')}>Procurar fornecedor</button>
+            {ctx.omie.available && <button type="button" className="btn btn-outline" onClick={() => setMode('register')}>Cadastrar no Omie</button>}
+          </div>
         </div>
       )}
 
-      {ctx && recognized && (
+      {ctx && mode === 'view' && recognized && (
         <>
+          <PhoneMismatch ctx={ctx} contact={contact} onDone={done} />
+          {!ctx.omie_supplier && !ctx.supplier?.omie_id && ctx.omie.available && (
+            <button type="button" className="btn btn-outline" onClick={() => setMode('register')}>Cadastrar no Omie</button>
+          )}
           <div className="grid2">
             <Kpi label="Compras em 12 meses" value={ctx.omie.orders_12m ? formatMoney(ctx.omie.spent_12m, 'BRL') : '—'} hint={`${ctx.omie.orders_12m} pedido(s)`} />
             <Kpi label="Ticket médio" value={ctx.omie.average_ticket != null ? formatMoney(ctx.omie.average_ticket, 'BRL') : '—'} />
@@ -172,6 +188,9 @@ export function SupplierPanel() {
           )}
 
           {!ctx.omie.available && <span className="small muted">Histórico do Omie indisponível no momento.</span>}
+          <button type="button" className="btn-link small" style={{ alignSelf: 'flex-start' }} onClick={() => setMode('search')}>
+            Não é este fornecedor? Trocar
+          </button>
         </>
       )}
     </section>

@@ -227,6 +227,17 @@ export class LiveOmie implements OmieGateway {
     return Number(body.codigo_cliente_omie);
   }
 
+  async updateSupplierPhone(omieId: number, phone: string) {
+    const digits = phone.replace(/\D/g, '');
+    const local = digits.startsWith('55') && digits.length >= 12 ? digits.slice(2) : digits;
+    if (local.length < 10) throw new OmieError('Telefone inválido', false);
+    await this.call('geral/clientes/', 'AlterarCliente', {
+      codigo_cliente_omie: omieId,
+      telefone1_ddd: local.slice(0, 2),
+      telefone1_numero: local.slice(2),
+    });
+  }
+
   async upsertPurchaseOrder(input: OmieOrderInput) {
     const body = await this.call<{ nCodPed: number; cNumero?: string }>('produtos/pedidocompra/', 'UpsertPedCompra', {
       cabecalho_upsert: {

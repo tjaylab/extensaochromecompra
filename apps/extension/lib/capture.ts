@@ -99,3 +99,27 @@ export function requestAttention(text: string) {
   if (window.parent === window) return; // Chrome side panel: nothing to do
   window.parent.postMessage({ source: PANEL_MESSAGE, type: 'attention', text }, 'https://web.whatsapp.com');
 }
+
+// ---------------------------------------------------------------------------
+// Reading as the buyer scrolls (entrypoints/whatsapp.content.ts -> the app)
+// ---------------------------------------------------------------------------
+
+/** New bubbles on screen in the open conversation, sent straight to the app pages. */
+export interface RowsLoadedMessage {
+  type: 'rows-loaded';
+  contact: ContactResponse;
+  position: 'initial' | 'older' | 'newer';
+  /** Text messages, in page order. */
+  messages: ConversationMessage[];
+  /** Received images and PDF documents (their data is fetched on request). */
+  media: { id: string; kind: 'image' | 'pdf'; name: string | null; direction: 'in' | 'out'; caption: string }[];
+}
+
+export type RowMediaRequest = { type: 'get-row-image'; id: string } | { type: 'read-row-pdf'; id: string };
+export type RowMediaResponse = { attachment: Attachment | null; error?: string };
+
+/** Drops a file into the open WhatsApp conversation (WhatsApp shows its send preview; the buyer sends). */
+export type AttachFileRequest = { type: 'attach-file'; name: string; mediaType: string; data: string };
+
+/** chrome.storage.local: phones learned from the contact info panel, by contact name. */
+export const CONTACT_PHONES_KEY = 'contactPhones';

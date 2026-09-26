@@ -8,7 +8,6 @@ import type { Capture } from '../lib/capture';
 
 export type Route =
   | { name: 'menu'; error?: string }
-  | { name: 'new' }
   | { name: 'review'; capture: Capture & { origin: 'whatsapp' | 'manual' } }
   | { name: 'quotes'; flash?: string }
   | { name: 'quote'; id: string }
@@ -87,6 +86,19 @@ const paths: Record<string, ReactNode> = {
   trash: <path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13" />,
   send: <path d="M4 12l16-8-6 16-2-7z" />,
   chevron: <path d="M6 9l6 6 6-6" />,
+  file: (
+    <>
+      <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" />
+      <path d="M14 3v5h5" />
+    </>
+  ),
+  mail: (
+    <>
+      <rect x="3" y="5" width="18" height="14" rx="2" />
+      <path d="M3 7l9 6 9-6" />
+    </>
+  ),
+  download: <path d="M12 4v11M7 10l5 5 5-5M5 20h14" />,
 };
 
 export function Icon({ name, size = 18, className }: { name: keyof typeof paths; size?: number; className?: string }) {

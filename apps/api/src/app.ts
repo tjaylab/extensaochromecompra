@@ -3,7 +3,7 @@ import Fastify from 'fastify';
 import type { Config } from './config.js';
 import { JobRunner, type AppContext, type Member } from './context.js';
 import { migrate, openDatabase, type Database } from './db/client.js';
-import { createExtractor, type Extractor } from './extraction/extractor.js';
+import { createExtractor, createScanner, type Extractor, type Scanner } from './extraction/extractor.js';
 import { createTokenVerifier, type AuthUser, type VerifyToken } from './lib/auth.js';
 import { Secrets } from './lib/crypto.js';
 import { HttpError } from './lib/errors.js';
@@ -23,6 +23,7 @@ export interface BuildOptions {
   cfg: Config;
   database?: Database;
   extractor?: Extractor;
+  scanner?: Scanner;
   verifyToken?: VerifyToken;
   jobRetryBaseMs?: number;
   makeLiveOmie?: (appKey: string, appSecret: string) => OmieGateway;
@@ -44,6 +45,7 @@ export async function buildApp(opts: BuildOptions) {
     db: database.db,
     secrets: new Secrets(cfg.ENCRYPTION_KEY, () => app.log.warn('ENCRYPTION_KEY not set: using an insecure development key')),
     extractor: opts.extractor ?? createExtractor(cfg),
+    scanner: opts.scanner ?? createScanner(cfg),
     jobs: new JobRunner(app.log, opts.jobRetryBaseMs ?? 2000),
     log: app.log,
     makeLiveOmie: opts.makeLiveOmie,
@@ -60,6 +62,7 @@ export async function buildApp(opts: BuildOptions) {
       cb(null, false); // no CORS headers: the browser blocks the call
     },
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
+    exposedHeaders: ['X-File-Name'], // the order PDF's file name
   });
 
   const verify = opts.verifyToken ?? createTokenVerifier(cfg);

@@ -32,3 +32,23 @@ describe('page-context PDF capture', () => {
     expect(posted).toHaveLength(1);
   });
 });
+
+describe('reading a PDF on the extension request', () => {
+  it('keeps the file and skips the save to disk when armed', async () => {
+    const posted: any[] = [];
+    vi.spyOn(window, 'postMessage').mockImplementation(((msg: any) => {
+      posted.push(msg);
+      // Deliver the arm message to the page script's listener, as the browser would.
+      if (msg?.source === `${PDF_MESSAGE}arm`) window.dispatchEvent(new MessageEvent('message', { data: msg, origin: window.location.origin, source: window }));
+    }) as any);
+    const saved = vi.fn();
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob(['%PDF-1.4 pedido'], { type: 'application/pdf' }));
+    a.download = 'Orcamento.pdf';
+    a.addEventListener('click', saved);
+    window.postMessage({ source: `${PDF_MESSAGE}arm`, suppressSave: true }, window.location.origin);
+    a.click();
+    await vi.waitFor(() => expect(posted.some((m) => m.source === PDF_MESSAGE && m.name === 'Orcamento.pdf')).toBe(true));
+    expect(saved).not.toHaveBeenCalled();
+  });
+});

@@ -1,7 +1,10 @@
 import { defineContentScript } from 'wxt/utils/define-content-script';
 import {
   blobToDataUrl,
+  CONTACT_PHONES_KEY,
+  PDF_MESSAGE,
   splitDataUrl,
+  type AttachFileRequest,
   type CaptureMessage,
   type ContactChangedMessage,
   type ContactRequest,
@@ -10,27 +13,61 @@ import {
   type ConversationResponse,
   type ImageRequest,
   type ImageResponse,
+  type RowMediaRequest,
+  type RowMediaResponse,
+  type RowsLoadedMessage,
   type SuggestionMessage,
-  PDF_MESSAGE,
 } from '../lib/capture';
-import { MessageWatch } from '../lib/message-watch';
-import { HISTORY_LIMITS, isInConversation, loadHistory, readContact, readConversation, readMessageRows } from '../lib/whatsapp-dom';
+import { RowReporter } from '../lib/row-reporter';
+import {
+  documentTarget,
+  HISTORY_LIMITS,
+  isInConversation,
+  loadHistory,
+  readContact as readContactFromPage,
+  readConversation,
+  readDrawerPhone,
+  readMessageRows,
+  rowById,
+  type MessageRow,
+} from '../lib/whatsapp-dom';
 
-// Shows a floating "Registrar cotação" button next to text selected inside the open conversation.
-// Reads only the open conversation (selected text, its recent messages and the contact), and only
-// when the buyer clicks; never other chats.
+// Reads the open conversation for ProcureMate: the messages on screen as they appear (opening the chat,
+// scrolling up, new arrivals), the contact's phone when the buyer opens the contact info, and received images
+// and PDFs on request. Never other chats.
 
 export default defineContentScript({
   matches: ['https://web.whatsapp.com/*'],
   runAt: 'document_idle',
   main() {
+    // ---------------------------------------------------------------------
+    // Contact: name from the header, phone from the page or learned from the contact info panel
+    // ---------------------------------------------------------------------
+    let learnedPhones: Record<string, string> = {};
+    chrome.storage.local.get(CONTACT_PHONES_KEY).then((r) => (learnedPhones = (r[CONTACT_PHONES_KEY] as Record<string, string>) ?? {}));
+    const readContact = (): ContactResponse => {
+      const c = readContactFromPage();
+      return c.contactPhone || !c.contactName ? c : { ...c, contactPhone: learnedPhones[c.contactName] ?? null };
+    };
+    const learnPhone = () => {
+      const c = readContactFromPage();
+      if (!c.contactName || c.contactPhone) return;
+      const phone = readDrawerPhone();
+      if (!phone || learnedPhones[c.contactName] === phone) return;
+      learnedPhones = { ...learnedPhones, [c.contactName]: phone };
+      chrome.storage.local.set({ [CONTACT_PHONES_KEY]: learnedPhones }).catch(() => {});
+    };
+
+    // ---------------------------------------------------------------------
+    // Floating "Registrar cotação" button over selected text
+    // ---------------------------------------------------------------------
     const host = document.createElement('div');
     host.style.cssText = 'position:fixed;z-index:2147483647;top:0;left:0;display:none;';
     const shadow = host.attachShadow({ mode: 'closed' });
     shadow.innerHTML = `
       <style>
         button{display:flex;align-items:center;gap:8px;height:36px;padding:0 14px;border:none;border-radius:999px;
-          background:#2563EB;color:#fff;font:600 14px system-ui,sans-serif;cursor:pointer;box-shadow:0 4px 14px rgba(20,73,58,.3)}
+          background:#2563EB;color:#fff;font:600 14px system-ui,sans-serif;cursor:pointer;box-shadow:0 4px 14px rgba(37,99,235,.3)}
         button:hover{background:#1D4ED8}
         button:focus-visible{outline:2px solid #1D4ED8;outline-offset:2px}
       </style>
@@ -46,7 +83,6 @@ export default defineContentScript({
       host.style.display = 'none';
       selectedText = '';
     };
-
     const update = () => {
       const sel = window.getSelection();
       const text = sel?.toString().trim() ?? '';
@@ -59,7 +95,6 @@ export default defineContentScript({
       host.style.transform = `translate(${left}px, ${top}px)`;
       host.style.display = 'block';
     };
-
     document.addEventListener('mouseup', () => setTimeout(update, 0));
     document.addEventListener('keyup', (e) => {
       if (e.key === 'Escape') hide();
@@ -70,7 +105,6 @@ export default defineContentScript({
       if (e.composedPath().includes(host)) e.preventDefault(); // keep the selection
       else hide();
     });
-
     button.addEventListener('click', () => {
       if (!selectedText) return;
       // The recent messages go along as context: the selection may miss the quantity or a later correction.
@@ -83,12 +117,14 @@ export default defineContentScript({
       window.getSelection()?.removeAllRanges();
     });
 
-    // Used by the right-click menu and the side panel's "Registrar da conversa aberta".
+    // ---------------------------------------------------------------------
+    // Requests from the app and the service worker
+    // ---------------------------------------------------------------------
     chrome.runtime.onMessage.addListener(
       (
-        msg: ContactRequest | ConversationRequest | ImageRequest,
+        msg: ContactRequest | ConversationRequest | ImageRequest | RowMediaRequest | AttachFileRequest,
         _sender,
-        sendResponse: (r: ContactResponse | ConversationResponse | ImageResponse) => void,
+        sendResponse: (r: ContactResponse | ConversationResponse | ImageResponse | RowMediaResponse | { ok: boolean }) => void,
       ) => {
         if (msg?.type === 'get-contact') sendResponse(readContact());
         if (msg?.type === 'get-conversation') {
@@ -96,13 +132,11 @@ export default defineContentScript({
             sendResponse({ ...readContact(), conversation: readConversation() });
             return;
           }
-          // Load the last N hours (scrolling up if needed), then read them.
           const since = Date.now() - msg.hours * 3600_000;
-          // Automatic reads never move the buyer's view: they use what is already loaded.
           (msg.scroll === false ? Promise.resolve(false) : loadHistory(since))
             .catch(() => false)
             .then(() => sendResponse({ ...readContact(), conversation: readConversation(undefined, HISTORY_LIMITS, since) }));
-          return true; // async sendResponse
+          return true;
         }
         if (msg?.type === 'get-image') {
           // Right-click > "Registrar cotação desta imagem": the image is a blob: URL only this page can read.
@@ -110,12 +144,36 @@ export default defineContentScript({
             (image) => sendResponse({ ...readContact(), conversation: readConversation(), image }),
             (err) => sendResponse({ ...readContact(), conversation: readConversation(), image: null, error: String(err?.message ?? err) }),
           );
-          return true; // async sendResponse
+          return true;
+        }
+        if (msg?.type === 'get-row-image') {
+          const img = rowImage(msg.id);
+          if (!img) {
+            sendResponse({ attachment: null, error: 'Imagem não encontrada na conversa' });
+            return;
+          }
+          imageData(img).then(
+            (attachment) => sendResponse({ attachment }),
+            (err) => sendResponse({ attachment: null, error: String(err?.message ?? err) }),
+          );
+          return true;
+        }
+        if (msg?.type === 'read-row-pdf') {
+          readRowPdf(msg.id).then(
+            (attachment) => sendResponse({ attachment }),
+            (err) => sendResponse({ attachment: null, error: String(err?.message ?? err) }),
+          );
+          return true;
+        }
+        if (msg?.type === 'attach-file') {
+          sendResponse({ ok: dropFile(msg) });
         }
       },
     );
 
-    // Tell the side panel when the buyer switches conversations, so it shows that supplier's history.
+    // ---------------------------------------------------------------------
+    // Messages on screen -> the app (it decides what to read)
+    // ---------------------------------------------------------------------
     let lastContact = '';
     const announce = () => {
       const contact = readContact();
@@ -125,49 +183,85 @@ export default defineContentScript({
       const msg: ContactChangedMessage = { type: 'contact-changed', contact };
       chrome.runtime.sendMessage(msg).catch(() => {});
     };
-    // Watch the open conversation for new proposals: priced text, images and PDFs from the supplier.
-    const watch = new MessageWatch();
-    const suggest = (s: SuggestionMessage['suggestion']) => chrome.runtime.sendMessage({ type: 'suggestion', suggestion: s } satisfies SuggestionMessage).catch(() => {});
-    const scanMessages = () => {
+
+    const reporter = new RowReporter();
+    const toMessage = (r: MessageRow) => ({ id: r.id, direction: r.direction, author: r.author ?? null, time: r.time ?? null, text: r.text.slice(0, 3000) });
+    const report = () => {
       const contact = readContact();
-      const chat = `${contact.contactName ?? ''}|${contact.contactPhone ?? ''}`;
-      for (const a of watch.scan(chat, readMessageRows())) {
-        if (a.kind === 'text') suggest({ kind: 'text', contact, text: a.row.text });
-        if (a.kind === 'pdf-hint') suggest({ kind: 'pdf-hint', contact, text: a.row.pdfName ?? 'documento.pdf' });
-        if (a.kind === 'image' && a.row.image) {
-          const el = a.row.image;
-          imageData(el)
-            .then((attachment) => suggest({ kind: 'image', contact, text: a.row.text, attachment, conversation: readConversation() }))
-            .catch(() => {});
-        }
+      const chat = readContactFromPage().contactName ?? contact.contactPhone ?? '';
+      if (!chat) return;
+      for (const batch of reporter.scan(chat, readMessageRows())) {
+        const msg: RowsLoadedMessage = {
+          type: 'rows-loaded',
+          contact,
+          position: batch.position,
+          messages: batch.rows.filter((r) => r.text && !r.image && !r.pdfName).map(toMessage),
+          media: batch.rows
+            .filter((r) => r.image || r.pdfName)
+            .map((r) => ({ id: r.id, kind: r.pdfName ? ('pdf' as const) : ('image' as const), name: r.pdfName, direction: r.direction, caption: r.text })),
+        };
+        if (msg.messages.length || msg.media.length) chrome.runtime.sendMessage(msg).catch(() => {});
       }
     };
 
-    // PDFs the buyer downloads: handed over by the page-context script (whatsapp-pdf.content.ts).
+    // PDFs the buyer downloads (or the app asks to read): handed over by the page-context script.
+    const suggest = (s: SuggestionMessage['suggestion']) => chrome.runtime.sendMessage({ type: 'suggestion', suggestion: s } satisfies SuggestionMessage).catch(() => {});
+    let pendingPdf: ((a: RowMediaResponse['attachment']) => void) | null = null;
     window.addEventListener('message', (e) => {
       if (e.source !== window || e.origin !== window.location.origin || e.data?.source !== PDF_MESSAGE) return;
       const data = String(e.data.data ?? '');
       if (!data || Math.floor((data.length * 3) / 4) > 8 * 1024 * 1024) return;
       const name = String(e.data.name ?? 'documento.pdf').slice(0, 200);
-      suggest({
-        kind: 'pdf',
-        contact: readContact(),
-        text: name,
-        attachment: { name, media_type: 'application/pdf', data },
-        conversation: readConversation(),
-      });
+      const attachment = { name, media_type: 'application/pdf' as const, data };
+      if (pendingPdf) {
+        pendingPdf(attachment); // requested by the app: no suggestion, it reads it directly
+        pendingPdf = null;
+        return;
+      }
+      suggest({ kind: 'pdf', contact: readContact(), text: name, attachment, conversation: readConversation() });
     });
 
     let timer: ReturnType<typeof setTimeout> | undefined;
     new MutationObserver(() => {
       clearTimeout(timer);
       timer = setTimeout(() => {
+        learnPhone();
         announce();
-        scanMessages();
+        report();
       }, 400);
     }).observe(document.body, { childList: true, subtree: true });
     announce();
-    scanMessages();
+    report();
+
+    // ---------------------------------------------------------------------
+    // Media helpers
+    // ---------------------------------------------------------------------
+    function rowImage(id: string): HTMLImageElement | null {
+      const imgs = [...(rowById(id)?.querySelectorAll<HTMLImageElement>('img[src^="blob:"]') ?? [])];
+      return imgs.sort((a, b) => b.naturalWidth * b.naturalHeight - a.naturalWidth * a.naturalHeight)[0] ?? null;
+    }
+
+    /**
+     * Makes WhatsApp download the document (click on the bubble) with the page-context script armed to keep the
+     * file and skip the save to disk.
+     */
+    function readRowPdf(id: string): Promise<RowMediaResponse['attachment']> {
+      const row = rowById(id);
+      const target = row && documentTarget(row);
+      if (!target) return Promise.reject(new Error('Documento não encontrado na conversa'));
+      return new Promise((resolve, reject) => {
+        const t = setTimeout(() => {
+          pendingPdf = null;
+          reject(new Error('O WhatsApp não entregou o PDF. Clique para baixar e eu leio.'));
+        }, 20_000);
+        pendingPdf = (a) => {
+          clearTimeout(t);
+          resolve(a);
+        };
+        window.postMessage({ source: `${PDF_MESSAGE}arm`, suppressSave: true }, window.location.origin);
+        target.click();
+      });
+    }
 
     /** The image as shown in the bubble: read the blob, or draw it when the blob cannot be fetched. */
     async function imageData(img: HTMLImageElement) {
@@ -196,6 +290,22 @@ export default defineContentScript({
         | 'image/webp'
         | 'image/gif';
       return { name: 'imagem-whatsapp', media_type, data: parts.data };
+    }
+
+    /**
+     * Drops a file into the open conversation, as if dragged from the desktop: WhatsApp opens its send preview
+     * and the buyer presses send. Returns false when there is no conversation to drop into.
+     */
+    function dropFile(f: AttachFileRequest): boolean {
+      const target = document.querySelector('#main footer') ?? document.querySelector('#main');
+      if (!target) return false;
+      const bytes = Uint8Array.from(atob(f.data), (c) => c.charCodeAt(0));
+      const dt = new DataTransfer();
+      dt.items.add(new File([bytes], f.name, { type: f.mediaType }));
+      for (const type of ['dragenter', 'dragover', 'drop']) {
+        target.dispatchEvent(new DragEvent(type, { bubbles: true, cancelable: true, dataTransfer: dt }));
+      }
+      return true;
     }
   },
 });

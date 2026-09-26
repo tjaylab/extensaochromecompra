@@ -3,10 +3,10 @@ import type { MeDTO } from '@compras/shared';
 import { ApiError, api } from '../lib/api';
 import { getToken, signOut } from '../lib/auth';
 import { CAPTURE_ERROR_KEY, PENDING_CAPTURE_KEY, type Capture } from '../lib/capture';
+import { ReaderProvider } from './reader/ReaderProvider';
 import { Login, Onboarding } from './screens/Auth';
 import { Compare } from './screens/Compare';
 import { Menu } from './screens/Menu';
-import { NewQuote } from './screens/NewQuote';
 import { Order } from './screens/Order';
 import { Orders } from './screens/Orders';
 import { QuoteDetail } from './screens/QuoteDetail';
@@ -95,8 +95,8 @@ export function App() {
   return (
     <SessionContext.Provider value={session}>
       <NavContext.Provider value={nav}>
+        <ReaderProvider>
         {r.name === 'menu' && <Menu key={r.error ?? 'menu'} error={r.error} />}
-        {r.name === 'new' && <NewQuote />}
         {r.name === 'review' && <Review key={r.capture.id} capture={r.capture} />}
         {r.name === 'quotes' && <Quotes flash={r.flash} />}
         {r.name === 'quote' && <QuoteDetail key={r.id} id={r.id} />}
@@ -106,6 +106,7 @@ export function App() {
         {r.name === 'orders' && <Orders />}
         {r.name === 'suppliers' && <Suppliers />}
         {r.name === 'settings' && <Settings />}
+        </ReaderProvider>
       </NavContext.Provider>
     </SessionContext.Provider>
   );

@@ -1,9 +1,10 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { betaZodOutputFormat } from '@anthropic-ai/sdk/helpers/beta/zod';
-import { ExtractionOutput, parseDecimal, type Attachment, type ConversationMessage } from '@compras/shared';
+import { z } from 'zod';
+import { ExtractionOutput, looksLikeProposal, parseDecimal, ScanOutput, type Attachment, type ConversationMessage } from '@compras/shared';
 import type { Config } from '../config.js';
 import { HttpError } from '../lib/errors.js';
-import { buildUserMessage, EXTRACTION_SYSTEM_PROMPT } from './prompt.js';
+import { buildScanMessage, buildUserMessage, EXTRACTION_SYSTEM_PROMPT } from './prompt.js';
 
 export interface ExtractionResult {
   output: ExtractionOutput;
@@ -25,17 +26,87 @@ export interface ExtractionInput {
 
 export type Extractor = (input: ExtractionInput) => Promise<ExtractionResult>;
 
+export interface ScanResult {
+  proposals: ExtractionOutput[];
+  model: string;
+  latencyMs: number;
+  inputTokens: number | null;
+  outputTokens: number | null;
+}
+
+/** Finds every distinct proposal in a stretch of conversation (reading as the buyer scrolls). */
+export type Scanner = (input: { conversation: ConversationMessage[]; contactName?: string | null; today: string }) => Promise<ScanResult>;
+
 export function createExtractor(cfg: Config): Extractor {
   return cfg.EXTRACTION_MODE === 'mock' ? mockExtractor : claudeExtractor(cfg);
 }
 
-function claudeExtractor(cfg: Config): Extractor {
-  const client = new Anthropic({
+export function createScanner(cfg: Config): Scanner {
+  return cfg.EXTRACTION_MODE === 'mock' ? mockScanner : claudeScanner(cfg);
+}
+
+function anthropicClient(cfg: Config) {
+  return new Anthropic({
     apiKey: cfg.ANTHROPIC_API_KEY,
     timeout: 30_000,
     maxRetries: 2,
     defaultHeaders: cfg.ANTHROPIC_WORKSPACE_ID ? { 'anthropic-workspace-id': cfg.ANTHROPIC_WORKSPACE_ID } : undefined,
   });
+}
+
+/** One structured-output call; maps API failures to messages the buyer can act on. */
+async function parseWithClaude<T extends z.ZodType>(
+  client: Anthropic,
+  cfg: Config,
+  schema: T,
+  content: Anthropic.Beta.BetaContentBlockParam[],
+  opts: { maxTokens: number; timeoutMs: number },
+): Promise<{ output: z.infer<T>; model: string; inputTokens: number | null; outputTokens: number | null }> {
+  let response;
+  try {
+    response = await client.beta.messages.parse(
+      {
+        model: cfg.CLAUDE_MODEL,
+        max_tokens: opts.maxTokens,
+        thinking: { type: 'adaptive' },
+        output_config: { effort: cfg.CLAUDE_EFFORT, format: betaZodOutputFormat(schema) },
+        // If a safety classifier declines, the API re-runs the request on its recommended fallback model.
+        betas: ['server-side-fallback-2026-07-01'],
+        fallbacks: 'default',
+        system: [{ type: 'text', text: EXTRACTION_SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } }],
+        messages: [{ role: 'user', content }],
+      },
+      { timeout: opts.timeoutMs },
+    );
+  } catch (err) {
+    if (err instanceof Anthropic.RateLimitError) {
+      throw new HttpError(503, 'extraction_busy', 'Serviço de interpretação ocupado. Tente de novo em alguns segundos.');
+    }
+    if (err instanceof Anthropic.APIConnectionError || err instanceof Anthropic.InternalServerError) {
+      throw new HttpError(503, 'extraction_unavailable', 'Serviço de interpretação indisponível. Tente de novo.');
+    }
+    if (err instanceof Anthropic.AuthenticationError || err instanceof Anthropic.PermissionDeniedError || err instanceof Anthropic.BadRequestError) {
+      // Configuration problem (key, workspace, model): logged by the error handler, shown to the buyer as unavailable.
+      throw Object.assign(new HttpError(503, 'extraction_misconfigured', 'Interpretação automática indisponível no momento. Preencha manualmente.'), { cause: err });
+    }
+    throw err;
+  }
+  if (response.stop_reason === 'refusal') {
+    throw new HttpError(422, 'extraction_refused', 'Não foi possível interpretar esta mensagem. Preencha a cotação manualmente.');
+  }
+  if (response.stop_reason === 'max_tokens' || !response.parsed_output) {
+    throw new HttpError(422, 'extraction_failed', 'A interpretação não terminou. Tente com um trecho menor da conversa.');
+  }
+  return {
+    output: response.parsed_output as z.infer<T>,
+    model: response.model,
+    inputTokens: response.usage?.input_tokens ?? null,
+    outputTokens: response.usage?.output_tokens ?? null,
+  };
+}
+
+function claudeExtractor(cfg: Config): Extractor {
+  const client = anthropicClient(cfg);
   return async (input) => {
     const started = Date.now();
     const files = input.attachments ?? [];
@@ -48,48 +119,26 @@ function claudeExtractor(cfg: Config): Extractor {
       ),
       { type: 'text', text: buildUserMessage(input) },
     ];
-    let response;
-    try {
-      response = await client.beta.messages.parse(
-        {
-        model: cfg.CLAUDE_MODEL,
-        // Price lists in PDFs can carry dozens of items.
-        max_tokens: files.length ? 16000 : 8000,
-        thinking: { type: 'adaptive' },
-        output_config: { effort: cfg.CLAUDE_EFFORT, format: betaZodOutputFormat(ExtractionOutput) },
-        // If a safety classifier declines, the API re-runs the request on its recommended fallback model.
-        betas: ['server-side-fallback-2026-07-01'],
-        fallbacks: 'default',
-        system: [{ type: 'text', text: EXTRACTION_SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } }],
-        messages: [{ role: 'user', content }],
-        },
-        { timeout: files.length ? 90_000 : 30_000 },
-      );
-    } catch (err) {
-      if (err instanceof Anthropic.RateLimitError) {
-        throw new HttpError(503, 'extraction_busy', 'Serviço de interpretação ocupado. Tente de novo em alguns segundos.');
-      }
-      if (err instanceof Anthropic.APIConnectionError || err instanceof Anthropic.InternalServerError) {
-        throw new HttpError(503, 'extraction_unavailable', 'Serviço de interpretação indisponível. Tente de novo.');
-      }
-      if (err instanceof Anthropic.AuthenticationError || err instanceof Anthropic.PermissionDeniedError || err instanceof Anthropic.BadRequestError) {
-        // Configuration problem (key, workspace, model): logged by the error handler, shown to the buyer as unavailable.
-        throw Object.assign(new HttpError(503, 'extraction_misconfigured', 'Interpretação automática indisponível no momento. Preencha manualmente.'), { cause: err });
-      }
-      throw err;
-    }
-    if (response.stop_reason === 'refusal') {
-      throw new HttpError(422, 'extraction_refused', 'Não foi possível interpretar esta mensagem. Preencha a cotação manualmente.');
-    }
-    if (response.stop_reason === 'max_tokens' || !response.parsed_output) {
-      throw new HttpError(422, 'extraction_failed', 'A interpretação não terminou. Tente com um trecho menor da conversa.');
-    }
+    // Price lists in PDFs can carry dozens of items.
+    const r = await parseWithClaude(client, cfg, ExtractionOutput, content, {
+      maxTokens: files.length ? 16000 : 8000,
+      timeoutMs: files.length ? 90_000 : 30_000,
+    });
+    return { ...r, output: normalizeOutput(r.output), latencyMs: Date.now() - started };
+  };
+}
+
+function claudeScanner(cfg: Config): Scanner {
+  const client = anthropicClient(cfg);
+  return async (input) => {
+    const started = Date.now();
+    const r = await parseWithClaude(client, cfg, ScanOutput, [{ type: 'text', text: buildScanMessage(input) }], { maxTokens: 16000, timeoutMs: 60_000 });
     return {
-      output: normalizeOutput(response.parsed_output),
-      model: response.model,
+      proposals: r.output.propostas.map(normalizeOutput).filter((p) => p.itens.length),
+      model: r.model,
       latencyMs: Date.now() - started,
-      inputTokens: response.usage?.input_tokens ?? null,
-      outputTokens: response.usage?.output_tokens ?? null,
+      inputTokens: r.inputTokens,
+      outputTokens: r.outputTokens,
     };
   };
 }
@@ -176,4 +225,16 @@ export const mockExtractor: Extractor = async ({ text, conversation, attachments
     inputTokens: null,
     outputTokens: null,
   };
+};
+
+/** Local stand-in for the scanner: one proposal per priced supplier message. */
+export const mockScanner: Scanner = async ({ conversation, contactName, today }) => {
+  const started = Date.now();
+  const proposals: ExtractionOutput[] = [];
+  for (const [i, m] of conversation.entries()) {
+    if (m.direction !== 'in' || !looksLikeProposal(m.text)) continue;
+    const { output } = await mockExtractor({ text: m.text, contactName, today });
+    if (output.itens.length) proposals.push({ ...output, mensagens_usadas: [i + 1] });
+  }
+  return { proposals, model: 'mock', latencyMs: Date.now() - started, inputTokens: null, outputTokens: null };
 };

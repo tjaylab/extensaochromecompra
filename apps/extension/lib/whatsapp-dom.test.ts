@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { isInConversation, phoneFromMessageIds, readContact, readConversation, readMessageRows } from './whatsapp-dom';
+import { isInConversation, phoneFromMessageIds, readContact, readConversation, readDrawerPhone, readMessageRows } from './whatsapp-dom';
 
 // Mirrors the parts of WhatsApp Web's markup the extension relies on.
 const msg = (dir: 'in' | 'out', meta: string, text: string, extra = '') => `
@@ -27,7 +27,8 @@ beforeEach(() => {
 describe('readConversation', () => {
   it('reads text messages in order with direction, author and time', () => {
     const c = readConversation();
-    expect(c).toEqual([
+    expect(c.every((m) => /^(true|false)_5511970001234@c\.us_/.test(m.id ?? ''))).toBe(true);
+    expect(c.map(({ id: _id, ...m }) => m)).toEqual([
       { direction: 'out', author: 'Ana', time: '09:12, 25/09/2026', text: 'Consegue cotar 30 fontes 24V?' },
       { direction: 'in', author: 'Carlos (Microsemi)', time: '10:47, 25/09/2026', text: 'Consigo 30 fontes Microsemi por USD 111,46 cada.' },
       { direction: 'in', author: 'Carlos (Microsemi)', time: '10:48, 25/09/2026', text: '[imagem] Segue foto do produto' },
@@ -86,5 +87,15 @@ describe('readMessageRows', () => {
     expect(rows[1]!.text).toBe('Consigo 30 fontes Microsemi por USD 111,46 cada.');
     expect(rows[2]!.image).not.toBeNull();
     expect(rows[3]).toMatchObject({ pdfName: 'Orcamento_4471.pdf', image: null });
+  });
+});
+
+describe('contact phone from the contact info panel', () => {
+  it('reads the phone outside the conversation and the chat list', () => {
+    document.body.insertAdjacentHTML('beforeend', '<div id="drawer"><section><div><span>Carlos (Microsemi)</span></div><div><span>+55 11 97000-1234</span></div></section></div>');
+    expect(readDrawerPhone()).toBe('+55 11 97000-1234');
+  });
+  it('ignores numbers typed inside the conversation', () => {
+    expect(readDrawerPhone()).toBeNull();
   });
 });

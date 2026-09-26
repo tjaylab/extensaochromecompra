@@ -6,6 +6,9 @@ import {
   EventInput,
   ExtractionRequest,
   LinkSupplierInput,
+  RegisterOmieSupplierInput,
+  ScanRequest,
+  UpdateOmiePhoneInput,
   UpdateOrderInput,
   UpdateQuoteInput,
 } from '@compras/shared';
@@ -14,13 +17,22 @@ import { badRequest, HttpError } from './lib/errors.js';
 import { listPaymentTerms, searchProducts, syncPaymentTerms, syncProducts } from './services/catalog.js';
 import { checkOmie, createCompany, getMe, inviteMember, listMembers, resolveMember, saveOmieCredentials } from './services/companies.js';
 import { logEvent } from './services/events.js';
-import { runExtraction } from './services/extractions.js';
+import { runExtraction, runScan } from './services/extractions.js';
 import { getMetrics } from './services/metrics.js';
+import { emailOrder, renderOrderPdf } from './services/order-document.js';
 import { createDraft, getOrder, listOrders, sendOrder, updateOrder } from './services/orders.js';
 import { createQuote, getQuote, listQuotes, updateQuote } from './services/quotes.js';
 import { createRequisition, getComparison, getRequisition, listRequisitions } from './services/requisitions.js';
 import { listSuppliers, updateSupplier } from './services/suppliers.js';
-import { getSupplierContext, linkSupplier, syncOmieOrders, syncOmieSuppliers } from './services/supplier-context.js';
+import {
+  getSupplierContext,
+  linkSupplier,
+  registerSupplierInOmie,
+  searchSuppliers,
+  syncOmieOrders,
+  syncOmieSuppliers,
+  updateOmiePhone,
+} from './services/supplier-context.js';
 
 function parse<T extends z.ZodType>(schema: T, data: unknown): z.infer<T> {
   const r = schema.safeParse(data ?? {});
@@ -78,6 +90,8 @@ export function registerRoutes(app: FastifyInstance, ctx: AppContext) {
   // --- Extraction -----------------------------------------------------------
   // Up to 3 files of 8 MB each, base64-encoded.
   app.post('/v1/extractions', { bodyLimit: 40 * 1024 * 1024 }, async (req) => runExtraction(ctx, member(req), parse(ExtractionRequest, req.body)));
+  // Every proposal in a stretch of conversation (the panel reads as the buyer scrolls).
+  app.post('/v1/extractions/scan', async (req) => runScan(ctx, member(req), parse(ScanRequest, req.body)));
 
   // --- Suppliers ------------------------------------------------------------
   app.get('/v1/suppliers', async (req) => listSuppliers(ctx, member(req), (req.query as { q?: string }).q));
@@ -89,6 +103,10 @@ export function registerRoutes(app: FastifyInstance, ctx: AppContext) {
     return getSupplierContext(ctx, member(req), { name: q.name ?? null, phone: q.phone ?? null });
   });
   app.post('/v1/suppliers/link', async (req) => linkSupplier(ctx, member(req), parse(LinkSupplierInput, req.body)));
+  // Search our register and Omie's when the automatic suggestion missed.
+  app.get('/v1/suppliers/search', async (req) => searchSuppliers(ctx, member(req), (req.query as { q?: string }).q ?? ''));
+  app.post('/v1/suppliers/omie', async (req) => registerSupplierInOmie(ctx, member(req), parse(RegisterOmieSupplierInput, req.body)));
+  app.post('/v1/suppliers/omie-phone', async (req) => updateOmiePhone(ctx, member(req), parse(UpdateOmiePhoneInput, req.body)));
 
   app.patch('/v1/suppliers/:id', async (req) => {
     const { id } = parse(Id, req.params);
@@ -144,6 +162,14 @@ export function registerRoutes(app: FastifyInstance, ctx: AppContext) {
   app.get('/v1/purchase-orders/:id', async (req) => getOrder(ctx, member(req), parse(Id, req.params).id));
   app.patch('/v1/purchase-orders/:id', async (req) => updateOrder(ctx, member(req), parse(Id, req.params).id, parse(UpdateOrderInput, req.body)));
   app.post('/v1/purchase-orders/:id/send', async (req) => sendOrder(ctx, member(req), parse(Id, req.params).id));
+  app.get('/v1/purchase-orders/:id/pdf', async (req, reply) => {
+    const { file, name } = await renderOrderPdf(ctx, member(req), parse(Id, req.params).id);
+    return reply.type('application/pdf').header('Content-Disposition', `inline; filename="${name}"`).header('X-File-Name', name).send(file);
+  });
+  app.post('/v1/purchase-orders/:id/email', async (req) => {
+    const body = parse(z.object({ to: z.string(), message: z.string().max(4000).nullish() }), req.body);
+    return emailOrder(ctx, member(req), parse(Id, req.params).id, body);
+  });
 
   // --- Instrumentation ------------------------------------------------------
   app.post('/v1/events', async (req) => {

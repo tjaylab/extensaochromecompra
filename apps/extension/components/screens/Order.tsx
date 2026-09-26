@@ -13,6 +13,7 @@ import {
   type UpdateOrderInput,
 } from '@compras/shared';
 import { api } from '../../lib/api';
+import { OrderDocument } from '../OrderDocument';
 import { ErrorBanner, Field, Icon, Screen, Spinner, StatusBadge, useLoad, useNav } from '../ui';
 import { deliveryLabel } from './Quotes';
 
@@ -270,6 +271,7 @@ function OrderResult({ o, onDone, onOrders }: { o: OrderDTO; onDone: () => void;
         <div className="row-between"><span className="muted">Status</span><StatusBadge status={o.status} label={ORDER_STATUS_LABEL[o.status]} /></div>
         {o.sent_at && <div className="row-between"><span className="muted">Enviado em</span><span>{isoToBr(o.sent_at)}</span></div>}
       </div>
+      {!sending && <OrderDocument o={o} />}
     </Screen>
   );
 }

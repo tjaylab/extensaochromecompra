@@ -53,3 +53,24 @@ export function buildUserMessage(input: {
   if (input.text.trim()) lines.push('', '<selecao>', input.text.trim(), '</selecao>');
   return lines.join('\n');
 }
+
+/**
+ * Scan mode: the buyer is scrolling through the conversation and every proposal in this stretch is wanted,
+ * not only the latest. Same (cached) system prompt, with an extra instruction.
+ */
+export function buildScanMessage(input: { conversation: ConversationMessage[]; contactName?: string | null; today: string }): string {
+  return [
+    `Data de hoje: ${input.today}`,
+    `Contato do WhatsApp: ${input.contactName?.trim() || 'não identificado'}`,
+    '',
+    'Modo varredura: liste em "propostas" TODAS as propostas distintas deste trecho da conversa, não só a mais recente.',
+    '- Uma proposta é uma oferta do fornecedor para um pedido (um ou mais produtos cotados juntos). Pedidos diferentes, em dias ou assuntos diferentes, são propostas separadas.',
+    '- Correções e contrapropostas aceitas atualizam a proposta a que se referem: devolva só o estado final dela, não uma entrada por versão.',
+    '- mensagens_usadas de cada proposta: os números [n] das mensagens de onde saíram os dados dela.',
+    '- Se o trecho não tiver nenhuma proposta com preço, devolva "propostas" vazio.',
+    '',
+    '<conversa>',
+    formatConversation(input.conversation),
+    '</conversa>',
+  ].join('\n');
+}

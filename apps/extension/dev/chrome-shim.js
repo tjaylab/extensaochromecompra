@@ -2,6 +2,8 @@
 // (served by preview-server.mjs). Not part of the extension bundle.
 (() => {
   const listeners = [];
+  const msgListeners = [];
+  window.__runtimeListeners = msgListeners;
   const area = (name, persist) => {
     const key = `chrome-shim:${name}`;
     const load = () => (persist ? JSON.parse(localStorage.getItem(key) || '{}') : (window[key] ||= {}));
@@ -37,11 +39,11 @@
       onChanged: { addListener: (l) => listeners.push(l), removeListener: (l) => listeners.splice(listeners.indexOf(l), 1) },
     },
     action: { setBadgeText: async () => {}, setBadgeBackgroundColor: async () => {} },
-    runtime: { id: 'dev', getURL: (p) => location.origin + (p.startsWith('/') ? p : '/' + p), sendMessage: async () => {}, onMessage: { addListener() {} } },
+    runtime: { id: 'dev', getURL: (p) => location.origin + (p.startsWith('/') ? p : '/' + p), sendMessage: async () => {}, onMessage: { addListener: (l) => msgListeners.push(l), removeListener: (l) => msgListeners.splice(msgListeners.indexOf(l), 1) } },
     // Simulates an open WhatsApp tab: set window.__conversation = [{ direction, author, time, text }, …]
     tabs: {
       query: async () => (window.__conversation ? [{ id: 1, active: true }] : []),
-      sendMessage: async () => ({ contactName: window.__contactName ?? null, contactPhone: window.__contactPhone ?? null, conversation: window.__conversation ?? [] }),
+      sendMessage: async (_id, msg) => msg?.type === 'attach-file' ? (console.log('[shim] attach-file', msg.name), { ok: true }) : ({ contactName: window.__contactName ?? null, contactPhone: window.__contactPhone ?? null, conversation: window.__conversation ?? [] }),
     },
   };
   // Simulates the WhatsApp content script: __capture('Consigo 30 fontes…', 'Carlos (Microsemi)', '+55 11 97000-1234')
@@ -59,3 +61,10 @@ window.__suggest = (s) =>
   chrome.storage.session.set({
     suggestion: { id: String(Date.now()), at: Date.now(), contact: { contactName: window.__contactName ?? 'Carlos (Microsemi)', contactPhone: window.__contactPhone ?? '+55 11 97000-1234' }, text: '', ...s },
   });
+// Simulates the content script reporting messages as they load (on open, or scrolling up):
+// __rows('initial', [{ id: 'm1', direction: 'in', text: 'Fica USD 105,90 cada' }], [])
+window.__rows = (position, messages, media = []) => {
+  const contact = { contactName: window.__contactName ?? 'Carlos (Microsemi)', contactPhone: window.__contactPhone ?? '+55 11 97000-1234' };
+  const msg = { type: 'rows-loaded', contact, position, messages: messages.map((m) => ({ author: null, time: null, ...m })), media };
+  window.__runtimeListeners.forEach((l) => l(msg, {}, () => {}));
+};

@@ -1,5 +1,14 @@
 import { createHash } from 'node:crypto';
-import { formatConversation, todayIso, type Attachment, type ConversationMessage, type ExtractionRequest, type ExtractionResponse } from '@compras/shared';
+import {
+  formatConversation,
+  todayIso,
+  type Attachment,
+  type ConversationMessage,
+  type ExtractionRequest,
+  type ExtractionResponse,
+  type ScanRequest,
+  type ScanResponse,
+} from '@compras/shared';
 import type { AppContext, Member } from '../context.js';
 import { extractions } from '../db/schema.js';
 import { HttpError } from '../lib/errors.js';
@@ -93,4 +102,57 @@ export function sourceExcerpt(selection: string, conversation: ConversationMessa
   }
   if (conversation?.length) return formatConversation(conversation, valid.length ? { only: valid } : {});
   return '';
+}
+
+/**
+ * Scan mode: finds every proposal in a stretch of conversation (the side panel sends what the buyer scrolls
+ * through). Each proposal is stored as its own extraction, so saving a quote works exactly as before.
+ */
+export async function runScan(ctx: AppContext, member: Member, input: ScanRequest): Promise<ScanResponse> {
+  rateLimit(member.userId);
+  const started = Date.now();
+  const conversation = input.conversation.filter((m) => m.text.trim());
+  if (!conversation.length) return { proposals: [], latency_ms: 0 };
+  const result = await ctx.scanner({ conversation, contactName: input.contact_name, today: todayIso() });
+  const supplierMatch = result.proposals.length
+    ? await matchSupplier(ctx, member.companyId, {
+        contactPhone: input.contact_phone,
+        contactName: input.contact_name,
+        extractedName: result.proposals.find((p) => p.fornecedor_nome)?.fornecedor_nome ?? null,
+      })
+    : null;
+  const proposals: ScanResponse['proposals'] = [];
+  for (const p of result.proposals) {
+    const used = p.mensagens_usadas.filter((n) => n <= conversation.length);
+    const [row] = await ctx.db
+      .insert(extractions)
+      .values({
+        companyId: member.companyId,
+        userId: member.userId,
+        sourceText: formatConversation(conversation),
+        contactName: input.contact_name ?? null,
+        contactPhone: input.contact_phone ?? null,
+        output: p,
+        model: result.model,
+        latencyMs: result.latencyMs,
+        inputTokens: result.inputTokens,
+        outputTokens: result.outputTokens,
+      })
+      .returning({ id: extractions.id });
+    proposals.push({
+      extraction_id: row.id,
+      data: p,
+      source_text: sourceExcerpt('', conversation, used),
+      supplier_match: supplierMatch!,
+      latency_ms: result.latencyMs,
+      message_ids: used.map((n) => conversation[n - 1]?.id).filter((id): id is string => !!id),
+    });
+  }
+  await logEvent(ctx, {
+    companyId: member.companyId,
+    userId: member.userId,
+    type: 'conversation_scanned',
+    data: { messages: conversation.length, proposals: proposals.length, latency_ms: Date.now() - started, model: result.model },
+  });
+  return { proposals, latency_ms: Date.now() - started };
 }

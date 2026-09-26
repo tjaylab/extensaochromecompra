@@ -52,6 +52,8 @@ function mockOrders(): OmiePurchaseOrderRecord[] {
 
 interface MockState {
   suppliers: Map<string, number>; // cnpj -> id
+  created: OmieSupplierRecord[]; // suppliers registered through the API
+  phoneUpdates: Map<number, string>; // omie id -> new main phone
   orders: Map<string, { nCodPed: number; cNumero: string; input: OmieOrderInput }>;
   nextId: number;
   failNext: { message: string; retryable: boolean }[];
@@ -62,7 +64,7 @@ const states = new Map<string, MockState>();
 export function mockState(companyId: string): MockState {
   let s = states.get(companyId);
   if (!s) {
-    s = { suppliers: new Map(), orders: new Map(), nextId: 187, failNext: [] };
+    s = { suppliers: new Map(), created: [], phoneUpdates: new Map(), orders: new Map(), nextId: 187, failNext: [] };
     states.set(companyId, s);
   }
   return s;
@@ -83,7 +85,16 @@ export class MockOmie implements OmieGateway {
 
   async testConnection() {}
   async listSuppliers() {
-    return SUPPLIERS;
+    return [...SUPPLIERS, ...this.s.created].map((x) => {
+      const phone = this.s.phoneUpdates.get(x.omie_id);
+      if (!phone) return x;
+      const d = phone.replace(/\D/g, '').replace(/^55(?=\d{10,11}$)/, '');
+      return { ...x, phones: [{ ddd: d.slice(0, 2), number: d.slice(2) }, ...x.phones.slice(1)] };
+    });
+  }
+  async updateSupplierPhone(omieId: number, phone: string) {
+    this.maybeFail();
+    this.s.phoneUpdates.set(omieId, phone);
   }
   async listPurchaseOrders() {
     return mockOrders();
@@ -103,6 +114,8 @@ export class MockOmie implements OmieGateway {
     if (existing) return existing;
     const id = 9000000 + this.s.suppliers.size + 1;
     this.s.suppliers.set(input.cnpj, id);
+    const local = (input.phone ?? '').replace(/\D/g, '').replace(/^55/, '');
+    this.s.created.push({ omie_id: id, name: input.name, trade_name: input.name, cnpj: input.cnpj, phones: local.length >= 10 ? [{ ddd: local.slice(0, 2), number: local.slice(2) }] : [], email: input.email ?? null, tags: ['Fornecedor'] });
     return id;
   }
   async upsertPurchaseOrder(input: OmieOrderInput) {

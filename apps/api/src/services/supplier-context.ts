@@ -10,6 +10,9 @@ import {
   todayIso,
   isoToBr,
   type LinkSupplierInput,
+  type RegisterOmieSupplierInput,
+  type SupplierSearchDTO,
+  type UpdateOmiePhoneInput,
   type OmieSupplierDTO,
   type SupplierContextDTO,
 } from '@compras/shared';
@@ -18,6 +21,7 @@ import { omiePurchaseOrders, omieSuppliers, omieSyncState, quoteItems, quotes, s
 import { badRequest, HttpError, notFound } from '../lib/errors.js';
 import { OmieError } from '../omie/gateway.js';
 import { getOmie } from './companies.js';
+import { logEvent } from './events.js';
 import { findOrCreateSupplier, isUniqueViolation, supplierDTO } from './suppliers.js';
 
 const TTL_MS = { suppliers: 6 * 3600_000, orders: 3600_000 } as const;
@@ -351,6 +355,7 @@ async function buildContext(ctx: AppContext, member: Member, contact: SupplierCo
     supplier: r.supplier ? supplierDTO(r.supplier) : null,
     omie_supplier: r.omie ? omieDTO(r.omie) : null,
     candidates: r.candidates.map(omieDTO),
+    phone_mismatch: phoneMismatch(contact.phone, r.omie),
     omie: {
       available: ordersOk,
       synced_at: syncedAt?.at ?? null,
@@ -388,4 +393,101 @@ export function lastMonths(n: number, today = todayIso()): string[] {
     const d = new Date(Date.UTC(y, m - 1 - (n - 1 - i), 1));
     return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
   });
+}
+
+/** The WhatsApp number differs from every phone Omie has for the supplier: offer to update it. */
+function phoneMismatch(phone: string | null, omie: OmieSupplierRow | null): SupplierContextDTO['phone_mismatch'] {
+  const key = phoneKey(phone);
+  if (!key || !omie || omie.phoneKeys.includes(key)) return null;
+  return { whatsapp: phone!, omie: omie.phones };
+}
+
+/** Search for the buyer to pick the supplier by hand: our register and Omie's (suppliers first). */
+export async function searchSuppliers(ctx: AppContext, member: Member, q: string): Promise<SupplierSearchDTO> {
+  const term = q.trim();
+  if (term.length < 2) return { local: [], omie: [] };
+  const norm = normalizeSupplierName(term);
+  const digits = term.replace(/\D/g, '');
+  const locals = (await ctx.db.select().from(suppliers).where(eq(suppliers.companyId, member.companyId)))
+    .filter((s) => s.nameNormalized.includes(norm) || (digits.length >= 4 && (s.cnpj ?? '').includes(digits)))
+    .slice(0, 5);
+  const omie = (await ctx.db.select().from(omieSuppliers).where(eq(omieSuppliers.companyId, member.companyId)))
+    .filter(
+      (s) =>
+        s.nameNormalized.includes(norm) ||
+        normalizeSupplierName(s.name).includes(norm) ||
+        (digits.length >= 4 && ((s.cnpj ?? '').includes(digits) || s.phoneKeys.some((k) => k.includes(digits)))),
+    )
+    .sort(bySupplierTag)
+    .slice(0, 8);
+  return { local: locals.map(supplierDTO), omie: omie.map(omieDTO) };
+}
+
+/** Registers the supplier in Omie from the side panel, links it and teaches the contact name/phone. */
+export async function registerSupplierInOmie(ctx: AppContext, member: Member, input: RegisterOmieSupplierInput): Promise<SupplierContextDTO> {
+  const cnpj = input.cnpj.replace(/\D/g, '');
+  if (!isValidCnpj(cnpj)) throw badRequest('CNPJ inválido');
+  let local: SupplierRow | undefined;
+  if (input.supplier_id) {
+    [local] = await ctx.db.select().from(suppliers).where(and(eq(suppliers.id, input.supplier_id), eq(suppliers.companyId, member.companyId))).limit(1);
+    if (!local) throw notFound('Fornecedor');
+    if (local.omieId) throw badRequest('Este fornecedor já está no Omie');
+  }
+  local ??= await findOrCreateSupplier(ctx, member, { name: input.name, phone: input.phone, cnpj, email: input.email || null });
+  const gateway = await getOmie(ctx, member.companyId);
+  let omieId: number;
+  try {
+    omieId = (await gateway.findSupplierByCnpj(cnpj)) ?? (await gateway.createSupplier({ integrationCode: local.id, name: input.name.trim(), cnpj, phone: normalizePhone(input.phone), email: input.email || null }));
+  } catch (err) {
+    if (err instanceof OmieError) throw badRequest('O Omie recusou o cadastro: ' + err.message);
+    throw err;
+  }
+  const aliases = [...new Set([...local.whatsappAliases, ...contactNames(input.contact_name).slice(0, 1)])];
+  try {
+    await ctx.db
+      .update(suppliers)
+      .set({ omieId, cnpj: local.cnpj ?? cnpj, name: local.name, phoneE164: local.phoneE164 ?? normalizePhone(input.phone), email: local.email ?? (input.email || null), whatsappAliases: aliases })
+      .where(eq(suppliers.id, local.id));
+  } catch (err) {
+    if (!isUniqueViolation(err)) throw err;
+  }
+  // Into the local copy right away, so the conversation is recognized without waiting for the next sync.
+  const key = phoneKey(input.phone);
+  await ctx.db
+    .insert(omieSuppliers)
+    .values({
+      companyId: member.companyId,
+      omieId,
+      name: input.name.trim(),
+      tradeName: input.name.trim(),
+      cnpj,
+      phoneKeys: key ? [key] : [],
+      phones: input.phone ? [input.phone] : [],
+      email: input.email || null,
+      tags: ['Fornecedor'],
+      nameNormalized: normalizeSupplierName(input.name),
+    })
+    .onConflictDoNothing();
+  await logEvent(ctx, { companyId: member.companyId, userId: member.userId, type: 'omie_supplier_registered', entityId: local.id, data: { omie_id: omieId } });
+  return getSupplierContext(ctx, member, { name: input.contact_name ?? null, phone: input.phone ?? null });
+}
+
+/** Replaces the supplier's main phone in Omie with the WhatsApp number. */
+export async function updateOmiePhone(ctx: AppContext, member: Member, input: UpdateOmiePhoneInput): Promise<SupplierContextDTO> {
+  const [omie] = await ctx.db.select().from(omieSuppliers).where(and(eq(omieSuppliers.companyId, member.companyId), eq(omieSuppliers.omieId, input.omie_id))).limit(1);
+  if (!omie) throw notFound('Fornecedor do Omie');
+  const gateway = await getOmie(ctx, member.companyId);
+  try {
+    await gateway.updateSupplierPhone(input.omie_id, input.phone);
+  } catch (err) {
+    if (err instanceof OmieError) throw badRequest('O Omie recusou a alteração: ' + err.message);
+    throw err;
+  }
+  const key = phoneKey(input.phone);
+  await ctx.db
+    .update(omieSuppliers)
+    .set({ phoneKeys: [...new Set([...(key ? [key] : []), ...omie.phoneKeys])], phones: [input.phone, ...omie.phones.slice(1)] })
+    .where(and(eq(omieSuppliers.companyId, member.companyId), eq(omieSuppliers.omieId, input.omie_id)));
+  await logEvent(ctx, { companyId: member.companyId, userId: member.userId, type: 'omie_supplier_phone_updated', data: { omie_id: input.omie_id } });
+  return getSupplierContext(ctx, member, { name: input.contact_name ?? null, phone: input.phone });
 }

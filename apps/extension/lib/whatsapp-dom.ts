@@ -86,6 +86,9 @@ export interface MessageRow {
   image: HTMLImageElement | null;
   /** File name when the bubble is a PDF document. */
   pdfName: string | null;
+  author?: string | null;
+  /** As WhatsApp shows it: "10:47, 25/09/2026". */
+  time?: string | null;
 }
 
 const ROW_ID_RE = /^(true|false)_/;
@@ -104,7 +107,16 @@ export function readMessageRows(root: ParentNode | null = conversationRoot()): M
     const whole = (el.innerText ?? el.textContent ?? '').replace(/\s+/g, ' ');
     // Bubble texts may run together ("Orcamento.pdf2 páginas"): ".pdf" must not be followed by a letter.
     const pdfName = whole.match(/([\w\-. ()À-ú]{1,120}\.pdf)(?![a-z])/i)?.[1]?.trim() ?? null;
-    rows.push({ id, direction: id.startsWith('true_') ? 'out' : directionOf(el), text, image, pdfName });
+    const meta = (el.querySelector('[data-pre-plain-text]')?.getAttribute('data-pre-plain-text') ?? '').match(/^\[([^\]]+)\]\s*(.*?):\s*$/);
+    rows.push({
+      id,
+      direction: id.startsWith('true_') ? 'out' : directionOf(el),
+      text,
+      image,
+      pdfName,
+      author: meta?.[2]?.trim() || null,
+      time: meta?.[1]?.trim() || null,
+    });
   }
   return rows;
 }
@@ -154,7 +166,8 @@ export function readConversation(
     if (!text) continue;
     const row = el.closest('[data-id]') ?? el.parentElement;
     if (row?.querySelector('img[src^="blob:"]')) text = `[imagem] ${text}`;
-    all.push({ direction: directionOf(el), author: meta?.[2]?.trim() || null, time, text: text.slice(0, 3000) });
+    const id = el.closest('[data-id]')?.getAttribute('data-id') ?? null;
+    all.push({ id, direction: directionOf(el), author: meta?.[2]?.trim() || null, time, text: text.slice(0, 3000) });
   }
   const recent: ConversationMessage[] = [];
   let chars = 0;
@@ -224,4 +237,35 @@ export async function loadHistory(since: number, opts: { timeoutMs?: number; ste
     scroller.scrollTop = scroller.scrollHeight - fromBottom;
   }
   return reached;
+}
+
+const FULL_PHONE_RE = /^\+\d[\d\s().-]{8,}\d$/;
+
+/**
+ * The phone shown in the contact info panel (opened by clicking the contact's name). WhatsApp keeps that panel
+ * outside the conversation (#main) and the chat list (#side); the first element whose whole text is a phone
+ * number is the contact's.
+ */
+export function readDrawerPhone(): string | null {
+  for (const el of document.querySelectorAll<HTMLElement>('span, div')) {
+    if (el.children.length || el.closest('#main, #side, footer')) continue;
+    const t = (el.textContent ?? '').trim();
+    if (t.length <= 22 && FULL_PHONE_RE.test(t)) return t;
+  }
+  return null;
+}
+
+/** A bubble's row element by WhatsApp message id. */
+export function rowById(id: string): HTMLElement | null {
+  return conversationRoot()?.querySelector<HTMLElement>(`[data-id="${CSS.escape(id)}"]`) ?? null;
+}
+
+/** The clickable part of a document bubble (clicking it makes WhatsApp download the file). */
+export function documentTarget(row: HTMLElement): HTMLElement | null {
+  const byRole = row.querySelector<HTMLElement>('[role="button"]');
+  if (byRole) return byRole;
+  for (const el of row.querySelectorAll<HTMLElement>('span, div')) {
+    if (/\.pdf\b/i.test(el.textContent ?? '') && !el.children.length) return el;
+  }
+  return null;
 }

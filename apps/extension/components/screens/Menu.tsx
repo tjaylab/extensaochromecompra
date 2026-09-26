@@ -1,23 +1,25 @@
 import { useEffect, useState, type KeyboardEvent } from 'react';
 import { api } from '../../lib/api';
-import { captureOpenConversation } from '../../lib/whatsapp-tab';
-import { AutoProposal } from '../AutoProposal';
+import { useReader } from '../reader/ReaderProvider';
+import { WorkPanel } from '../reader/WorkPanel';
 import { SupplierPanel } from '../SupplierPanel';
 import { ErrorBanner, Icon, Screen, useLoad, useNav, useSession } from '../ui';
 
-type Tab = 'insights' | 'work';
+type Tab = 'insights' | 'work' | 'manage';
 const TABS: { id: Tab; label: string }[] = [
   { id: 'insights', label: 'Insights' },
   { id: 'work', label: 'Work' },
+  { id: 'manage', label: 'Gestão' },
 ];
 const TAB_KEY = 'homeTab';
 
-/** Home: "Insights" (the supplier of the open conversation) and "Work" (actions). Remembers the last tab. */
+/** Home: "Insights" (the supplier of the open conversation), "Work" (live reading) and "Gestão". Remembers the last tab. */
 export function Menu({ error }: { error?: string }) {
   const [tab, setTab] = useState<Tab>(error ? 'work' : 'insights');
+  const reader = useReader();
   useEffect(() => {
     if (error) return;
-    chrome.storage.local.get(TAB_KEY).then((r) => r[TAB_KEY] === 'work' && setTab('work'));
+    chrome.storage.local.get(TAB_KEY).then((r) => TABS.some((t) => t.id === r[TAB_KEY]) && setTab(r[TAB_KEY] as Tab));
   }, [error]);
   const select = (t: Tab) => {
     setTab(t);
@@ -27,7 +29,8 @@ export function Menu({ error }: { error?: string }) {
   const onKey = (e: KeyboardEvent) => {
     if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
     e.preventDefault();
-    select(tab === 'insights' ? 'work' : 'insights');
+    const i = TABS.findIndex((t) => t.id === tab);
+    select(TABS[(i + (e.key === 'ArrowRight' ? 1 : TABS.length - 1)) % TABS.length]!.id);
   };
 
   const { me } = useSession();
@@ -49,41 +52,41 @@ export function Menu({ error }: { error?: string }) {
               onClick={() => select(t.id)}
             >
               {t.label}
+              {t.id === 'work' && reader.readyCount > 0 && <span className="tab-badge">{reader.readyCount}</span>}
             </button>
           ))}
         </nav>
       }
     >
-      <AutoProposal />
       <div id={`panel-${tab}`} role="tabpanel" aria-labelledby={`tab-${tab}`} className="stack" style={{ gap: 16 }}>
-        {tab === 'insights' ? <SupplierPanel /> : <Work error={error} />}
+        {error && <ErrorBanner message={error} />}
+        {tab === 'insights' && (
+          <>
+            {reader.readyCount > 0 && (
+              <button type="button" className="banner banner-ai" style={{ textAlign: 'left' }} onClick={() => select('work')}>
+                <Icon name="check" />
+                <span>
+                  {reader.readyCount === 1 ? '1 cotação pronta' : `${reader.readyCount} cotações prontas`} nesta conversa · ver em Work
+                </span>
+              </button>
+            )}
+            <SupplierPanel />
+          </>
+        )}
+        {tab === 'work' && <WorkPanel />}
+        {tab === 'manage' && <Manage />}
       </div>
     </Screen>
   );
 }
 
-function Work({ error }: { error?: string }) {
+function Manage() {
   const nav = useNav();
   const { me } = useSession();
   const counts = useLoad(async () => {
     const [quotes, reqs, orders] = await Promise.all([api.quotes(), api.requisitions('open'), api.orders()]);
     return { quotes: quotes.length, reqs: reqs.length, orders: orders.length };
   });
-  const [readError, setReadError] = useState<string | null>(error ?? null);
-  const [reading, setReading] = useState(false);
-
-  const fromConversation = async () => {
-    setReading(true);
-    setReadError(null);
-    try {
-      const capture = await captureOpenConversation();
-      nav.go({ name: 'review', capture: { ...capture, origin: 'whatsapp' } });
-    } catch (e) {
-      setReadError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setReading(false);
-    }
-  };
 
   return (
     <>
@@ -104,14 +107,7 @@ function Work({ error }: { error?: string }) {
           </div>
         </div>
       )}
-      {readError && <ErrorBanner message={readError} />}
       <div className="stack">
-        <button type="button" className="btn btn-primary btn-lg" onClick={fromConversation} disabled={reading}>
-          <Icon name="plus" size={20} /> {reading ? 'Lendo a conversa…' : 'Registrar da conversa aberta'}
-        </button>
-        <button type="button" className="btn btn-secondary btn-lg" onClick={() => nav.go({ name: 'new' })}>
-          Anexar PDF ou imagem
-        </button>
         <button type="button" className="btn btn-secondary btn-lg" onClick={() => nav.go({ name: 'quotes' })}>
           Minhas cotações <span className="count">{counts.data?.quotes ?? ''}</span>
         </button>

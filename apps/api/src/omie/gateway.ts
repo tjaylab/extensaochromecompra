@@ -61,5 +61,7 @@ export interface OmieGateway {
   listPaymentTerms(): Promise<OmiePaymentTermDTO[]>;
   findSupplierByCnpj(cnpj: string): Promise<number | null>;
   createSupplier(input: OmieSupplierInput): Promise<number>;
+  /** Replaces the main phone (telefone1) of a supplier. */
+  updateSupplierPhone(omieId: number, phone: string): Promise<void>;
   upsertPurchaseOrder(input: OmieOrderInput): Promise<{ nCodPed: number; cNumero: string | null }>;
 }

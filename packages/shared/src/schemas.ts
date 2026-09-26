@@ -45,8 +45,16 @@ export const ExtractionOutput = z.object({
 });
 export type ExtractionOutput = z.infer<typeof ExtractionOutput>;
 
+/** Scan mode: every distinct proposal found in a stretch of conversation. */
+export const ScanOutput = z.object({
+  propostas: z.array(ExtractionOutput).describe('Uma entrada por proposta distinta, no estado final de cada uma; vazio se não houver'),
+});
+export type ScanOutput = z.infer<typeof ScanOutput>;
+
 /** One message read from the open WhatsApp conversation. */
 export const ConversationMessage = z.object({
+  /** WhatsApp's message id (data-id), when read from the page. */
+  id: z.string().max(200).nullish(),
   direction: z.enum(['in', 'out']), // in = from the supplier, out = from the buyer
   author: z.string().max(200).nullish(),
   time: z.string().max(40).nullish(), // as WhatsApp shows it, e.g. "10:47, 25/09/2026"
@@ -159,6 +167,8 @@ export interface SupplierContextDTO {
   omie_supplier: OmieSupplierDTO | null;
   /** When nothing matched: likely suppliers for the buyer to confirm. */
   candidates: OmieSupplierDTO[];
+  /** The WhatsApp number is not among the phones registered in Omie for this supplier. */
+  phone_mismatch: { whatsapp: string; omie: string[] } | null;
   omie: {
     available: boolean; // false when Omie is not connected or unreachable
     synced_at: string | null;
@@ -190,10 +200,46 @@ export const LinkSupplierInput = z.object({
 });
 export type LinkSupplierInput = z.infer<typeof LinkSupplierInput>;
 
+/** Registers the conversation's supplier in Omie (tag Fornecedor), from the side panel. */
+export const RegisterOmieSupplierInput = z.object({
+  supplier_id: z.string().uuid().nullish(),
+  name: z.string().trim().min(2, 'Informe a razão social'),
+  cnpj: z.string().min(11, 'Informe o CNPJ'),
+  email: z.string().email('E-mail inválido').nullish().or(z.literal('')),
+  phone: z.string().max(40).nullish(),
+  contact_name: z.string().max(200).nullish(),
+});
+export type RegisterOmieSupplierInput = z.infer<typeof RegisterOmieSupplierInput>;
+
+export const UpdateOmiePhoneInput = z.object({
+  omie_id: z.number().int(),
+  phone: z.string().min(8).max(40),
+  contact_name: z.string().max(200).nullish(),
+});
+export type UpdateOmiePhoneInput = z.infer<typeof UpdateOmiePhoneInput>;
+
+export interface SupplierSearchDTO {
+  local: SupplierDTO[];
+  omie: OmieSupplierDTO[];
+}
+
 export interface SupplierMatch {
   supplier: SupplierDTO | null;
   reason: 'phone' | 'name' | null;
   suggestions: SupplierDTO[];
+}
+
+export const ScanRequest = z.object({
+  conversation: z.array(ConversationMessage).min(1).max(400),
+  contact_name: z.string().max(200).nullish(),
+  contact_phone: z.string().max(40).nullish(),
+});
+export type ScanRequest = z.infer<typeof ScanRequest>;
+
+/** Each proposal found, ready for the quote flow (one extraction record per proposal). */
+export interface ScanResponse {
+  proposals: (ExtractionResponse & { message_ids: string[] })[];
+  latency_ms: number;
 }
 
 export interface ExtractionResponse {

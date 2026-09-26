@@ -1,6 +1,6 @@
 import type { Config } from './config.js';
 import type { DB } from './db/client.js';
-import type { Extractor } from './extraction/extractor.js';
+import type { Extractor, Scanner } from './extraction/extractor.js';
 import type { Secrets } from './lib/crypto.js';
 import type { OmieGateway } from './omie/gateway.js';
 
@@ -22,6 +22,7 @@ export interface AppContext {
   db: DB;
   secrets: Secrets;
   extractor: Extractor;
+  scanner: Scanner;
   jobs: JobRunner;
   log: Logger;
   /** Overridable in tests to inject a fake live gateway. */
