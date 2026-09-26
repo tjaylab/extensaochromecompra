@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { MockAsaas } from '../src/payments/asaas.js';
+import { LiveAsaas, MockAsaas } from '../src/payments/asaas.js';
 import { PRD_MESSAGE, setup, VALID_CNPJ } from './helpers.js';
 
 const payments = new MockAsaas();
@@ -99,8 +99,43 @@ describe('checkout and Asaas webhook', () => {
     expect((await buyer().get('/v1/billing')).body.discount_percent).toBe(40);
   });
 
+  it('recovers when the Asaas subscription no longer exists (e.g. created on the sandbox)', async () => {
+    const old = [...payments.subscriptions.keys()][0]!;
+    payments.subscriptions.delete(old);
+    const r = await admin({ plan: 'essencial' });
+    expect(r.status).toBe(200);
+    expect(r.body.asaas_subscription_id).toBeNull();
+    const c = await buyer().post('/v1/billing/checkout', { plan: 'essencial', cycle: 'monthly' });
+    expect(c.status).toBe(200);
+    const fresh = [...payments.subscriptions.keys()].find((k) => k !== old)!;
+    expect(payments.subscriptions.get(fresh)).toMatchObject({ value: 118.2 }); // Essencial 197 − 40%
+  });
+
   it('marks a period as paid by hand (manual billing)', async () => {
     const r = await admin({ mark_paid: true, cycle: 'monthly' });
     expect(r.body).toMatchObject({ status: 'active', cycle: 'monthly' });
+  });
+});
+
+describe('Asaas live client', () => {
+  it('updates subscriptions with PUT and sends the API key header', async () => {
+    const calls: { url: string; method: string; headers: Record<string, string>; body: unknown }[] = [];
+    const http = (async (url: string, init: RequestInit) => {
+      calls.push({ url, method: init.method!, headers: init.headers as Record<string, string>, body: init.body ? JSON.parse(String(init.body)) : null });
+      return new Response('{}', { status: 200 });
+    }) as unknown as typeof fetch;
+    const asaas = new LiveAsaas('chave-teste', 'sandbox', http);
+    await asaas.updateSubscription('sub_123', { value: 197, cycle: 'monthly', billingType: 'UNDEFINED', description: 'x' });
+    expect(calls[0]).toMatchObject({
+      url: 'https://api-sandbox.asaas.com/v3/subscriptions/sub_123',
+      method: 'PUT',
+      headers: { access_token: 'chave-teste' },
+      body: { value: 197, cycle: 'MONTHLY', updatePendingPayments: true },
+    });
+  });
+
+  it('reports a missing subscription as 404', async () => {
+    const http = (async () => new Response(JSON.stringify({ errors: [{ description: 'Assinatura não encontrada' }] }), { status: 404 })) as unknown as typeof fetch;
+    await expect(new LiveAsaas('k', 'production', http).updateSubscription('x', { value: 1, cycle: 'monthly', billingType: 'UNDEFINED', description: '' })).rejects.toMatchObject({ status: 404 });
   });
 });

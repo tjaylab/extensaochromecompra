@@ -22,6 +22,7 @@ import { logEvent } from './services/events.js';
 import { runExtraction, runScan } from './services/extractions.js';
 import { getMetrics } from './services/metrics.js';
 import { emailOrder, renderOrderPdf } from './services/order-document.js';
+import { renderComparisonPdf } from './services/comparison-document.js';
 import { createDraft, getOrder, listOrders, sendOrder, updateOrder } from './services/orders.js';
 import { createQuote, getQuote, listQuotes, updateQuote } from './services/quotes.js';
 import { createRequisition, getComparison, getRequisition, listRequisitions } from './services/requisitions.js';
@@ -145,6 +146,10 @@ export function registerRoutes(app: FastifyInstance, ctx: AppContext) {
   app.post('/v1/requisitions', async (req) => createRequisition(ctx, member(req), parse(CreateRequisitionInput, req.body)));
   app.get('/v1/requisitions/:id', async (req) => getRequisition(ctx, member(req), parse(Id, req.params).id));
   app.get('/v1/requisitions/:id/comparison', async (req) => getComparison(ctx, member(req), parse(Id, req.params).id));
+  app.get('/v1/requisitions/:id/comparison/pdf', async (req, reply) => {
+    const { file, name } = await renderComparisonPdf(ctx, member(req), parse(Id, req.params).id);
+    return reply.type('application/pdf').header('Content-Disposition', `inline; filename="${name}"`).header('X-File-Name', name).send(file);
+  });
 
   // --- Omie catalog ---------------------------------------------------------
   app.get('/v1/omie/products', async (req) => searchProducts(ctx, member(req).companyId, (req.query as { q?: string }).q));

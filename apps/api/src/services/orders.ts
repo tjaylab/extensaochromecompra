@@ -121,7 +121,7 @@ export async function createDraft(ctx: AppContext, member: Member, quoteId: stri
       .innerJoin(quotes, eq(quotes.id, purchaseOrders.quoteId))
       .where(and(eq(quotes.requisitionId, quote.requisition.id), ne(purchaseOrders.quoteId, quoteId)));
     if (siblings.some((s) => s.po.status === 'sent' || s.po.status === 'sending')) {
-      throw conflict('Esta requisição já tem pedido enviado ao Omie');
+      throw conflict('Este comparativo já tem pedido enviado ao Omie');
     }
     for (const { po } of siblings) {
       await ctx.db.delete(purchaseOrders).where(eq(purchaseOrders.id, po.id));

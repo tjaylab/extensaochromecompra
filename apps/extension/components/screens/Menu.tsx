@@ -112,7 +112,7 @@ function Manage() {
           Minhas cotações <span className="count">{counts.data?.quotes ?? ''}</span>
         </button>
         <button type="button" className="btn btn-secondary btn-lg" onClick={() => nav.go({ name: 'requisitions' })}>
-          Requisições <span className="count">{counts.data ? `${counts.data.reqs} abertas` : ''}</span>
+          Comparativos <span className="count">{counts.data ? `${counts.data.reqs} ${counts.data.reqs === 1 ? "aberto" : "abertos"}` : ''}</span>
         </button>
         <button type="button" className="btn btn-secondary btn-lg" onClick={() => nav.go({ name: 'orders' })}>
           Pedidos de compra <span className="count">{counts.data?.orders ?? ''}</span>
@@ -128,6 +128,10 @@ function Manage() {
         </button>
         <button type="button" className="btn btn-secondary btn-lg" onClick={() => nav.go({ name: 'settings' })}>
           <Icon name="settings" /> Configurações
+          <span className="count row" style={{ gap: 6 }}>
+            <span className={`status-dot ${me.omie.status === 'connected' ? 'ok' : me.omie.status === 'not_configured' ? 'idle' : 'bad'}`} aria-hidden="true" />
+            {me.omie.status === 'connected' ? (me.omie.mode === 'mock' ? 'Omie simulado' : 'Omie conectado') : me.omie.status === 'not_configured' ? 'Omie não conectado' : 'Omie com erro'}
+          </span>
         </button>
         {me.is_superadmin && (
           <button type="button" className="btn btn-outline btn-lg" onClick={() => nav.go({ name: 'admin' })}>

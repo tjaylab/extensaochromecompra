@@ -2,6 +2,7 @@ import { defineContentScript } from 'wxt/utils/define-content-script';
 import {
   blobToDataUrl,
   CONTACT_PHONES_KEY,
+  DRAG_FILE_TYPE,
   PDF_MESSAGE,
   splitDataUrl,
   type AttachFileRequest,
@@ -9,6 +10,7 @@ import {
   type ContactChangedMessage,
   type ContactRequest,
   type ContactResponse,
+  type DragFileRequest,
   type ConversationRequest,
   type ConversationResponse,
   type ImageRequest,
@@ -239,6 +241,41 @@ export default defineContentScript({
     report();
 
     // ---------------------------------------------------------------------
+    // Files dragged out of the ProcureMate panel (order PDF, comparison PDF)
+    // ---------------------------------------------------------------------
+    // The drag only carries a token (browsers don't pass page-made files between sites). While it is over the
+    // conversation we accept it and keep WhatsApp's own drop overlay out; on drop we fetch the file from the panel
+    // and drop a real file where the buyer released it, so WhatsApp opens its send preview.
+    const isPanelDrag = (e: DragEvent) => !!e.dataTransfer?.types.includes(DRAG_FILE_TYPE);
+    for (const type of ['dragenter', 'dragover'] as const) {
+      window.addEventListener(
+        type,
+        (e) => {
+          if (!isPanelDrag(e)) return;
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          e.dataTransfer!.dropEffect = document.querySelector('#main')?.contains(e.target as Node) ? 'copy' : 'none';
+        },
+        true,
+      );
+    }
+    window.addEventListener(
+      'drop',
+      (e) => {
+        if (!isPanelDrag(e)) return;
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        const token = e.dataTransfer!.getData(DRAG_FILE_TYPE);
+        const at = e.target as Element | null;
+        chrome.runtime
+          .sendMessage({ type: 'get-drag-file', token } satisfies DragFileRequest)
+          .then((f: Omit<AttachFileRequest, 'type'> | null) => f && dropFile(f, at))
+          .catch(() => {});
+      },
+      true,
+    );
+
+    // ---------------------------------------------------------------------
     // Media helpers
     // ---------------------------------------------------------------------
     function loadedImage(id: string): HTMLImageElement | null {
@@ -315,8 +352,8 @@ export default defineContentScript({
      * Drops a file into the open conversation, as if dragged from the desktop: WhatsApp opens its send preview
      * and the buyer presses send. Returns false when there is no conversation to drop into.
      */
-    function dropFile(f: AttachFileRequest): boolean {
-      const target = document.querySelector('#main footer') ?? document.querySelector('#main');
+    function dropFile(f: Omit<AttachFileRequest, 'type'>, at?: Element | null): boolean {
+      const target = (at && document.querySelector('#main')?.contains(at) ? at : null) ?? document.querySelector('#main footer') ?? document.querySelector('#main');
       if (!target) return false;
       const bytes = Uint8Array.from(atob(f.data), (c) => c.charCodeAt(0));
       const dt = new DataTransfer();

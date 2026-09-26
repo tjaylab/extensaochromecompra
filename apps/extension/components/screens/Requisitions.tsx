@@ -3,7 +3,7 @@ import { formatDecimal, parseDecimal } from '@compras/shared';
 import { api } from '../../lib/api';
 import { ErrorBanner, Field, Icon, Screen, Spinner, StatusBadge, useLoad, useNav } from '../ui';
 
-const LABEL = { open: 'Aberta', ordered: 'Pedido gerado', cancelled: 'Cancelada' } as const;
+const LABEL = { open: 'Aberto', ordered: 'Pedido gerado', cancelled: 'Cancelado' } as const;
 const BADGE = { open: 'comparing', ordered: 'ordered', cancelled: 'discarded' } as const;
 
 export function Requisitions() {
@@ -33,10 +33,10 @@ export function Requisitions() {
   };
 
   return (
-    <Screen title="Requisições">
+    <Screen title="Comparativos">
       {creating ? (
         <form className="card" onSubmit={submit}>
-          <span className="section-label">Nova requisição</span>
+          <span className="section-label">Novo comparativo</span>
           {error && <ErrorBanner message={error} />}
           <Field id="r-title" label="Título">
             <input id="r-title" className="input" required value={title} onChange={(e) => setTitle(e.target.value)} placeholder="ex.: Fontes 24V industriais" />
@@ -59,12 +59,12 @@ export function Requisitions() {
         </form>
       ) : (
         <button type="button" className="btn btn-secondary" style={{ alignSelf: 'flex-start' }} onClick={() => setCreating(true)}>
-          <Icon name="plus" size={16} /> Nova requisição
+          <Icon name="plus" size={16} /> Novo comparativo
         </button>
       )}
       {list.loading && <Spinner label="Carregando…" />}
       {list.error && <ErrorBanner message={list.error} onRetry={list.reload} />}
-      {list.data && !list.data.length && <div className="empty">Nenhuma requisição ainda. Crie uma para comparar propostas.</div>}
+      {list.data && !list.data.length && <div className="empty">Nenhum comparativo ainda. Crie um para comparar propostas.</div>}
       <div className="stack">
         {list.data?.map((r) => (
           <button key={r.id} type="button" className="card card-button" onClick={() => nav.go({ name: 'compare', id: r.id })}>

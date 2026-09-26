@@ -124,5 +124,9 @@ export type RowMediaResponse = { attachment: Attachment | null; error?: string }
 /** Drops a file into the open WhatsApp conversation (WhatsApp shows its send preview; the buyer sends). */
 export type AttachFileRequest = { type: 'attach-file'; name: string; mediaType: string; data: string };
 
+/** A file dragged out of the panel carries only this token; the content script asks the panel for the file on drop. */
+export const DRAG_FILE_TYPE = 'application/x-procuremate-file';
+export type DragFileRequest = { type: 'get-drag-file'; token: string };
+
 /** chrome.storage.local: phones learned from the contact info panel, by contact name. */
 export const CONTACT_PHONES_KEY = 'contactPhones';

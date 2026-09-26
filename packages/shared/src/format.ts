@@ -147,7 +147,7 @@ export function quoteNumber(seq: number): string {
 }
 
 export function requisitionNumber(seq: number): string {
-  return `REQ-${String(seq).padStart(4, '0')}`;
+  return `CMP-${String(seq).padStart(4, '0')}`;
 }
 
 export function orderNumber(seq: number): string {

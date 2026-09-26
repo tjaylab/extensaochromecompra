@@ -117,6 +117,7 @@ export const api = {
   requisitions: (status?: string) => request<RequisitionDTO[]>('GET', `/v1/requisitions${qs({ status })}`),
   createRequisition: (body: CreateRequisitionInput) => request<RequisitionDTO>('POST', '/v1/requisitions', body),
   comparison: (id: string) => request<ComparisonDTO>('GET', `/v1/requisitions/${id}/comparison`),
+  comparisonPdf: (id: string) => requestFile(`/v1/requisitions/${id}/comparison/pdf`),
 
   products: (q?: string) => request<OmieProductDTO[]>('GET', `/v1/omie/products${qs({ q })}`),
   paymentTerms: () => request<OmiePaymentTermDTO[]>('GET', '/v1/omie/payment-terms'),

@@ -93,6 +93,30 @@ describe('suppliers: search, register in Omie, phone update', () => {
 });
 
 describe('purchase order document', () => {
+  it('exports a comparison as a PDF with one column per proposal', async () => {
+    const req = await user().post('/v1/requisitions', { title: 'Fontes 24V industriais', items: [{ description: 'Fonte 24V 10A', quantity: 30, unit: 'un' }] });
+    for (const [name, price, cur] of [['Microsemi', 111.46, 'USD'], ['Eletrônica Sul', 598.5, 'BRL'], ['Distribuidora Norte', 610, 'BRL'], ['Fontes & Cia', 590, 'BRL'], ['Quinta Opção', 620, 'BRL']] as const) {
+      const q = await user().post('/v1/quotes', {
+        supplier: { new: { name } },
+        requisition_id: req.body.id,
+        currency: cur,
+        delivery_days: 15,
+        quote_date: '2026-09-25',
+        source_text: 'x',
+        origin: 'manual',
+        items: [{ description: 'Fonte 24V 10A', quantity: 30, unit: 'un', unit_price: price }],
+      });
+      expect(q.status).toBe(200);
+    }
+    const res = await env.app.inject({ method: 'GET', url: `/v1/requisitions/${req.body.id}/comparison/pdf`, headers: { authorization: 'Bearer dev:v11@empresa.com' } });
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['content-type']).toBe('application/pdf');
+    expect(res.headers['x-file-name']).toMatch(/^Comparativo-CMP-\d{4}-Fontes-24V-industriais\.pdf$/);
+    const pdf = res.rawPayload.toString('latin1');
+    expect(pdf.startsWith('%PDF-')).toBe(true);
+    expect(pdf.match(/\/Type \/Page\n/g)).toHaveLength(2); // 5 proposals: 4 + 1 columns
+  });
+
   it('renders the order as a PDF and needs e-mail configured to send it', async () => {
     const q = await user().post('/v1/quotes', {
       supplier: { new: { name: 'Eletrônica Paulista', cnpj: VALID_CNPJ } },

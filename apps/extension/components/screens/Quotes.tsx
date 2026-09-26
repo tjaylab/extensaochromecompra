@@ -86,7 +86,7 @@ export function Quotes({ flash }: { flash?: string }) {
             </div>
             <div className="row-between small muted">
               <span>Prazo {deliveryLabel(q)}</span>
-              <span>{q.requisition ? q.requisition.number : 'Sem requisição'}</span>
+              <span>{q.requisition ? q.requisition.number : 'Sem comparativo'}</span>
             </div>
           </button>
         ))}

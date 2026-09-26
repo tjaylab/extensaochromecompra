@@ -104,9 +104,9 @@ export function QuoteDetail({ id }: { id: string }) {
       </div>
       {editable && (
         <div className="stack">
-          <Field id="link-req" label="Requisição">
+          <Field id="link-req" label="Comparativo">
             <select id="link-req" className="select" value={reqId} onChange={(e) => setReqId(e.target.value)}>
-              <option value="">Sem requisição</option>
+              <option value="">Sem comparativo</option>
               {reqs.data?.map((r) => (
                 <option key={r.id} value={r.id}>{r.number} · {r.title}</option>
               ))}

@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { formatDecimal, formatMoney, QUOTE_STATUS_LABEL, type QuoteDTO } from '@compras/shared';
 import { ApiError, api } from '../../lib/api';
-import { ErrorBanner, Screen, Spinner, useLoad, useNav } from '../ui';
+import { PdfCard } from '../PdfCard';
+import { ErrorBanner, Icon, Screen, Spinner, useLoad, useNav } from '../ui';
 import { deliveryLabel } from './Quotes';
 
 type Row = { label: string; value: (q: QuoteDTO) => string; mono?: boolean };
@@ -23,6 +24,7 @@ export function Compare({ id }: { id: string }) {
   const [selected, setSelected] = useState<string>('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
     if (!cmp.data) return;
@@ -50,14 +52,14 @@ export function Compare({ id }: { id: string }) {
   };
 
   if (!cmp.data) {
-    return <Screen title="Comparar propostas">{cmp.error ? <ErrorBanner message={cmp.error} onRetry={cmp.reload} /> : <Spinner label="Carregando…" />}</Screen>;
+    return <Screen title="Comparativo">{cmp.error ? <ErrorBanner message={cmp.error} onRetry={cmp.reload} /> : <Spinner label="Carregando…" />}</Screen>;
   }
   const { requisition, quotes } = cmp.data;
   const chosen = quotes.find((q) => q.id === selected);
 
   return (
     <Screen
-      title="Comparar propostas"
+      title="Comparativo"
       footer={
         <>
           <span className="grow small muted">
@@ -74,9 +76,18 @@ export function Compare({ id }: { id: string }) {
         <strong style={{ fontSize: 16 }}>{requisition.title}</strong>
         <span className="small muted">Valores na moeda original, sem conversão automática. Arraste para o lado se houver muitas propostas.</span>
       </div>
+      {!!quotes.length &&
+        (exporting ? (
+          // Reloads when the selection changes, so the PDF highlights the chosen proposal.
+          <PdfCard title="PDF do comparativo" load={() => api.comparisonPdf(id)} deps={[id, quotes.map((q) => q.status).join()]} />
+        ) : (
+          <button type="button" className="btn btn-outline" style={{ alignSelf: 'flex-start' }} onClick={() => setExporting(true)}>
+            <Icon name="file" size={16} /> Exportar PDF
+          </button>
+        ))}
       {error && <ErrorBanner message={error} />}
       {!quotes.length ? (
-        <div className="empty">Nenhuma cotação vinculada a esta requisição ainda.</div>
+        <div className="empty">Nenhuma cotação neste comparativo ainda.</div>
       ) : (
         <div className="table-scroll">
           <table className="cmp">

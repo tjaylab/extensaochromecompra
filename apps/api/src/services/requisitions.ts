@@ -34,7 +34,7 @@ export async function listRequisitions(ctx: AppContext, member: Member, status?:
 
 export async function getRequisition(ctx: AppContext, member: Member, id: string) {
   const [r] = await ctx.db.select().from(requisitions).where(and(eq(requisitions.id, id), eq(requisitions.companyId, member.companyId))).limit(1);
-  if (!r) throw notFound('Requisição');
+  if (!r) throw notFound('Comparativo');
   return (await toDTOs(ctx, [r]))[0];
 }
 

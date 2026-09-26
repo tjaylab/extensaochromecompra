@@ -184,7 +184,7 @@ export function Review({ capture }: { capture: Capture & { origin: 'whatsapp' | 
     if (days != null && (!Number.isInteger(days) || days < 0)) e.delivery_days = 'Número de dias inteiro';
     const freightValue = form.freight_value.trim() ? parseDecimal(form.freight_value) : null;
     if (form.freight_value.trim() && freightValue == null) e.freight_value = 'Valor inválido';
-    if (form.requisition_id === '__new' && !form.new_requisition_title.trim()) e.requisition = 'Dê um título para a nova requisição';
+    if (form.requisition_id === '__new' && !form.new_requisition_title.trim()) e.requisition = 'Dê um nome para o novo comparativo';
     const items = form.items.map((i, idx) => {
       const quantity = parseDecimal(i.quantity);
       const unitPrice = parseDecimal(i.unit_price);
@@ -443,17 +443,17 @@ export function Review({ capture }: { capture: Capture & { origin: 'whatsapp' | 
       </section>
 
       <section className="stack">
-        <Field id="req" label="Requisição" error={errors.requisition} hint="Vincule para comparar com outras propostas. Dá para vincular depois.">
+        <Field id="req" label="Comparativo" error={errors.requisition} hint="Vincule para comparar com outras propostas. Dá para vincular depois.">
           <select id="req" className="select" value={form.requisition_id} onChange={(e) => set('requisition_id', e.target.value)}>
-            <option value="">Sem requisição (vincular depois)</option>
+            <option value="">Sem comparativo (vincular depois)</option>
             {requisitions.map((r) => (
               <option key={r.id} value={r.id}>{r.number} · {r.title}</option>
             ))}
-            <option value="__new">+ Nova requisição…</option>
+            <option value="__new">+ Novo comparativo…</option>
           </select>
         </Field>
         {form.requisition_id === '__new' && (
-          <Field id="req-title" label="Título da nova requisição">
+          <Field id="req-title" label="Nome do novo comparativo">
             <input id="req-title" className="input" value={form.new_requisition_title} onChange={(e) => set('new_requisition_title', e.target.value)} placeholder="ex.: Fontes 24V industriais" />
           </Field>
         )}

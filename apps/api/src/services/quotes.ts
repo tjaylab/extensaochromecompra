@@ -79,8 +79,8 @@ export async function getQuote(ctx: AppContext, companyId: string, id: string): 
 
 async function assertRequisition(ctx: AppContext, companyId: string, id: string) {
   const [r] = await ctx.db.select().from(requisitions).where(and(eq(requisitions.id, id), eq(requisitions.companyId, companyId))).limit(1);
-  if (!r) throw notFound('Requisição');
-  if (r.status === 'cancelled') throw conflict('Requisição cancelada');
+  if (!r) throw notFound('Comparativo');
+  if (r.status === 'cancelled') throw conflict('Comparativo cancelado');
   return r;
 }
 

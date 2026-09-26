@@ -1,5 +1,7 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import type { MeDTO } from '@compras/shared';
+import { USAGE_WARNING } from '@compras/shared';
+import { useBilling } from '../lib/billing-store';
 import type { Capture } from '../lib/capture';
 
 // ---------------------------------------------------------------------------
@@ -120,17 +122,31 @@ export function Spinner({ label }: { label?: string }) {
   );
 }
 
-export function OmieChip() {
-  const { me } = useSession();
-  const s = me.omie.status;
-  const cls = s === 'connected' ? 'status-ok' : s === 'not_configured' ? 'status-idle' : 'status-bad';
-  const label =
-    s === 'connected' ? (me.omie.mode === 'mock' ? 'Omie simulado' : 'Conectado ao Omie') : s === 'not_configured' ? 'Omie não conectado' : 'Omie com erro';
+/** Header: the plan and the AI readings left this month; opens "Plano e uso". */
+export function PlanChip() {
+  const nav = useNav();
+  const b = useBilling();
+  if (!b) return null;
+  const left = Math.max(0, b.limits.readings - b.usage.readings);
+  const trialDays = b.status === 'trialing' && b.trial_ends_at ? Math.ceil((new Date(b.trial_ends_at).getTime() - Date.now()) / 86_400_000) : null;
+  const cls = !b.can_read ? 'status-bad' : b.usage.readings >= b.limits.readings * USAGE_WARNING || b.status === 'past_due' ? 'status-warn' : 'status-ok';
+  const label = !b.can_read
+    ? b.blocked_reason === 'reading_limit'
+      ? 'Leituras esgotadas'
+      : trialDays != null
+        ? 'Teste encerrado'
+        : 'Assinatura inativa'
+    : `${left.toLocaleString('pt-BR')} leituras`;
   return (
-    <span className={`status-chip ${cls}`}>
+    <button
+      type="button"
+      className={`status-chip chip-btn ${cls}`}
+      onClick={() => nav.route.name !== 'plan' && nav.go({ name: 'plan' })}
+      title={`${b.plan.name}${trialDays != null && trialDays > 0 ? ` · teste: ${trialDays} dia(s)` : ''} · ${b.usage.readings} de ${b.limits.readings} leituras usadas`}
+    >
       <span className="dot" />
       {label}
-    </span>
+    </button>
   );
 }
 
@@ -150,7 +166,7 @@ export function Header({ title }: { title: string }) {
         </span>
         <span className="header-name">{title}</span>
       </div>
-      <OmieChip />
+      <PlanChip />
     </header>
   );
 }

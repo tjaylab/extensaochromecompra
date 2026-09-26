@@ -48,7 +48,7 @@ export class LiveAsaas implements PaymentsGateway {
     this.base = env === 'production' ? 'https://api.asaas.com/v3' : 'https://api-sandbox.asaas.com/v3';
   }
 
-  private async call<T>(method: 'GET' | 'POST' | 'DELETE', path: string, body?: unknown): Promise<T> {
+  private async call<T>(method: 'GET' | 'POST' | 'PUT' | 'DELETE', path: string, body?: unknown): Promise<T> {
     let res: Response;
     try {
       res = await this.http(this.base + path, {
@@ -80,7 +80,7 @@ export class LiveAsaas implements PaymentsGateway {
   }
 
   async updateSubscription(id: string, input: Pick<SubscriptionInput, 'value' | 'cycle' | 'billingType' | 'description'>) {
-    await this.call('POST', `/subscriptions/${encodeURIComponent(id)}`, { ...input, cycle: CYCLE[input.cycle], updatePendingPayments: true });
+    await this.call('PUT', `/subscriptions/${encodeURIComponent(id)}`, { ...input, cycle: CYCLE[input.cycle], updatePendingPayments: true });
   }
 
   async cancelSubscription(id: string) {

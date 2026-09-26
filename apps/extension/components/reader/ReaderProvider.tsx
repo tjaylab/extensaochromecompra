@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { looksLikeProposal, type Attachment, type ConversationMessage, type ExtractionResponse } from '@compras/shared';
 import { ApiError, api } from '../../lib/api';
+import { refreshBilling } from '../../lib/billing-store';
 import { quoteFromExtraction } from '../../lib/auto-quote';
 import {
   AUTO_READ_KEY,
@@ -217,7 +218,7 @@ export function ReaderProvider({ children }: { children: ReactNode }) {
     update(key, st.contact, (x) => ({ ...x, busy: true }));
     const aid = addActivity(key, st.contact, { kind: 'analyze', text: 'Analisando cotação…', done: false });
     try {
-      const r = await api.scan({ conversation: chunk, contact_name: st.contact.contactName, contact_phone: st.contact.contactPhone });
+      const r = await api.scan({ conversation: chunk, contact_name: st.contact.contactName, contact_phone: st.contact.contactPhone }).finally(refreshBilling);
       addProposals(key, st.contact, r.proposals.map((p) => ({ ex: p, ids: p.message_ids, source: 'conversation' as const })));
       addActivity(key, st.contact, {
         id: aid,
@@ -276,7 +277,7 @@ export function ReaderProvider({ children }: { children: ReactNode }) {
       const r = await sendToWhatsApp<RowMediaResponse>({ type: m.kind === 'pdf' ? 'read-row-pdf' : 'get-row-image', id: m.id });
       if (!r?.attachment) throw new Error(r?.error ?? `Não consegui abrir ${label}.`);
       const context = (ref.current[key]?.messages ?? []).slice(-CONTEXT_BEFORE);
-      const ex = await api.extract({ text: '', conversation: context, attachments: [r.attachment], contact_name: contact.contactName, contact_phone: contact.contactPhone });
+      const ex = await api.extract({ text: '', conversation: context, attachments: [r.attachment], contact_name: contact.contactName, contact_phone: contact.contactPhone }).finally(refreshBilling);
       if (ex.data.itens.length) {
         addProposals(key, contact, [{ ex, ids: [m.id], source: m.kind === 'pdf' ? 'pdf' : 'image', fileName: m.name }]);
         addActivity(key, contact, { id: aid, kind: 'found', text: `Cotação encontrada em ${label}`, done: true });
@@ -386,7 +387,7 @@ export function ReaderProvider({ children }: { children: ReactNode }) {
     const aid = addActivity(key, contact, { kind: 'analyze', text: `Lendo ${label}…`, done: false });
     try {
       const context = (ref.current[key]?.messages ?? []).slice(-CONTEXT_BEFORE);
-      const ex = await api.extract({ text: '', conversation: context, attachments: [att], contact_name: contact.contactName, contact_phone: contact.contactPhone });
+      const ex = await api.extract({ text: '', conversation: context, attachments: [att], contact_name: contact.contactName, contact_phone: contact.contactPhone }).finally(refreshBilling);
       if (ex.data.itens.length) {
         addProposals(key, contact, [{ ex, ids: [], source, fileName: att.name }]);
         addActivity(key, contact, { id: aid, kind: 'found', text: `Cotação encontrada em ${label}`, done: true });

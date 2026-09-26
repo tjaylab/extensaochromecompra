@@ -203,3 +203,13 @@ textarea.input { height: auto; padding-top: 8px; padding-bottom: 8px; resize: ve
 .plan-list li { display: flex; align-items: center; gap: 6px; }
 .plan-list svg { color: var(--success); flex: none; }
 .row > .grow { flex: 1; min-width: 0; }
+.status-warn { background: var(--warn-soft); color: var(--warn-ink); }
+.status-warn .dot { background: #D97706; }
+.chip-btn { border: none; cursor: pointer; font-family: inherit; }
+.chip-btn:hover { filter: brightness(0.97); }
+.chip-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.status-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; flex: none; }
+.status-dot.ok { background: #16A34A; box-shadow: 0 0 0 3px rgba(22, 163, 74, .15); }
+.status-dot.idle { background: #94A3B8; }
+.status-dot.bad { background: #C23B2E; box-shadow: 0 0 0 3px rgba(194, 59, 46, .15); }
+.pdf-view { width: 100%; height: 420px; border: 1px solid var(--line); border-radius: 10px; background: #fff; }

@@ -178,21 +178,37 @@ export async function checkout(ctx: AppContext, member: Member, input: CheckoutI
   const value = planPrice(plan, input.cycle, s.discountPercent);
   const description = `ProcureMate ${plan.name} (${input.cycle === 'yearly' ? 'anual' : 'mensal'})${s.discountPercent ? ` · ${s.discountPercent}% de desconto` : ''}`;
   try {
-    const customer =
-      s.asaasCustomerId ?? (await payments.createCustomer({ name: company!.name, cpfCnpj: cnpj, email: input.email || member.email, externalReference: member.companyId }));
+    const newCustomer = () => payments.createCustomer({ name: company!.name, cpfCnpj: cnpj, email: input.email || member.email, externalReference: member.companyId });
+    let customer = s.asaasCustomerId ?? (await newCustomer());
     let subscriptionId = s.asaasSubscriptionId;
     if (subscriptionId) {
-      await payments.updateSubscription(subscriptionId, { value, cycle: input.cycle, billingType: input.billing_type, description });
-    } else {
-      subscriptionId = await payments.createSubscription({
-        customer,
-        value,
-        cycle: input.cycle,
-        billingType: input.billing_type,
-        description,
-        externalReference: member.companyId,
-        nextDueDate: new Date().toISOString().slice(0, 10),
-      });
+      try {
+        await payments.updateSubscription(subscriptionId, { value, cycle: input.cycle, billingType: input.billing_type, description });
+      } catch (err) {
+        // Gone from Asaas (removed there, or created on the other account: sandbox vs production): start a new one.
+        if (!(err instanceof PaymentsError && err.status === 404)) throw err;
+        subscriptionId = null;
+      }
+    }
+    if (!subscriptionId) {
+      const create = (c: string) =>
+        payments.createSubscription({
+          customer: c,
+          value,
+          cycle: input.cycle,
+          billingType: input.billing_type,
+          description,
+          externalReference: member.companyId,
+          nextDueDate: new Date().toISOString().slice(0, 10),
+        });
+      try {
+        subscriptionId = await create(customer);
+      } catch (err) {
+        // The stored customer may belong to the other Asaas account as well.
+        if (!(err instanceof PaymentsError && s.asaasCustomerId && (err.status === 404 || err.status === 400))) throw err;
+        customer = await newCustomer();
+        subscriptionId = await create(customer);
+      }
     }
     const invoiceUrl = await payments.invoiceUrl(subscriptionId);
     // The new plan applies right away; the status turns "active" when Asaas confirms the payment.
@@ -341,7 +357,12 @@ export async function adminUpdateSubscription(ctx: AppContext, email: string, co
         description: `ProcureMate ${plan.name} (${cycle === 'yearly' ? 'anual' : 'mensal'})${discount ? ` · ${discount}% de desconto` : ''}`,
       });
     } catch (err) {
-      throw new HttpError(502, 'payments_error', `Salvo no ProcureMate, mas o Asaas recusou a atualização: ${err instanceof Error ? err.message : String(err)}`);
+      if (err instanceof PaymentsError && err.status === 404) {
+        // The subscription no longer exists on this Asaas account: forget it; the next "Assinar" creates a new one.
+        await ctx.db.update(subscriptions).set({ asaasSubscriptionId: null, asaasCustomerId: null, invoiceUrl: null }).where(eq(subscriptions.companyId, companyId));
+      } else {
+        throw new HttpError(502, 'payments_error', `Salvo no ProcureMate, mas o Asaas recusou a atualização: ${err instanceof Error ? err.message : String(err)}`);
+      }
     }
   }
   await logEvent(ctx, { companyId, userId: null, type: 'subscription_admin_update', data: { by: email, ...input } });

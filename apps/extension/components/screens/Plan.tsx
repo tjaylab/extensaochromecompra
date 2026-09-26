@@ -14,6 +14,7 @@ import {
   type PlanId,
 } from '@compras/shared';
 import { ApiError, api } from '../../lib/api';
+import { setBilling } from '../../lib/billing-store';
 import { ErrorBanner, Field, Icon, Screen, Spinner, StatusBadge, useLoad, useSession } from '../ui';
 
 const STATUS_BADGE = { trialing: 'info', active: 'ok', past_due: 'selected', canceled: 'error' } as const;
@@ -25,13 +26,21 @@ function openPage(url: string) {
 
 /** Gestão > Plano e uso: the company's plan, this month's AI readings and buyers, and changing plan (Asaas). */
 export function Plan() {
-  const billing = useLoad(() => api.billing());
+  const billing = useLoad(() => api.billing().then((b) => (setBilling(b), b)));
   const b = billing.data;
   return (
     <Screen title="Plano e uso">
       {billing.error && <ErrorBanner message={billing.error} onRetry={billing.reload} />}
       {!b && !billing.error && <Spinner label="Carregando…" />}
-      {b && <PlanBody b={b} onChange={billing.setData} />}
+      {b && (
+        <PlanBody
+          b={b}
+          onChange={(next) => {
+            billing.setData(next);
+            setBilling(next);
+          }}
+        />
+      )}
     </Screen>
   );
 }

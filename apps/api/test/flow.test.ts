@@ -38,7 +38,7 @@ describe('full flow: register, compare, order', () => {
   it('creates a requisition', async () => {
     const r = await buyer().post('/v1/requisitions', { title: 'Fontes 24V industriais', items: [{ description: 'Fonte 24V', quantity: 30, unit: 'un' }] });
     expect(r.status).toBe(200);
-    expect(r.body.number).toMatch(/^REQ-\d{4}$/);
+    expect(r.body.number).toMatch(/^CMP-\d{4}$/);
     requisitionId = r.body.id;
   });
 
