@@ -1,5 +1,5 @@
 // Drizzle mirror of migrations/0001_init.sql. The SQL file is the source of truth for DDL.
-import { bigint, bigserial, date, integer, jsonb, numeric, pgTable, primaryKey, text, timestamp, uuid } from 'drizzle-orm/pg-core';
+import { bigint, bigserial, boolean, date, integer, jsonb, numeric, pgTable, primaryKey, text, timestamp, uuid } from 'drizzle-orm/pg-core';
 
 const ts = (name: string) => timestamp(name, { withTimezone: true, mode: 'string' });
 const money = (name: string) => numeric(name, { precision: 14, scale: 4, mode: 'number' });
@@ -13,6 +13,8 @@ export const companies = pgTable('companies', {
   omieAppSecretEnc: text('omie_app_secret_enc'),
   omieStatus: text('omie_status').notNull().default('not_configured'),
   omieCheckedAt: ts('omie_checked_at'),
+  /** Demo company: Omie is simulated (reviewers, sales demos). */
+  demo: boolean('demo').notNull().default(false),
   createdAt: ts('created_at').notNull().defaultNow(),
 });
 

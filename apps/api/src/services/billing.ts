@@ -305,6 +305,7 @@ async function adminRow(ctx: AppContext, c: typeof companies.$inferSelect): Prom
     tokens: { input: used.input, output: used.output },
     asaas_subscription_id: s.asaasSubscriptionId,
     discount_percent: s.discountPercent,
+    demo: c.demo,
   };
 }
 
@@ -328,6 +329,10 @@ export async function adminUpdateSubscription(ctx: AppContext, email: string, co
   if (input.custom_seats !== undefined) set.customSeats = input.custom_seats;
   if (input.custom_readings !== undefined) set.customReadings = input.custom_readings;
   if (input.discount_percent !== undefined) set.discountPercent = input.discount_percent;
+  let company = c;
+  if (input.demo !== undefined) {
+    [company] = await ctx.db.update(companies).set({ demo: input.demo }).where(eq(companies.id, companyId)).returning();
+  }
   if (input.trial_ends_at !== undefined) {
     set.trialEndsAt = input.trial_ends_at ? iso(new Date(input.trial_ends_at)) : null;
     if (set.trialEndsAt && (input.status ?? s.status) === 'trialing') set.periodEnd = set.trialEndsAt;
@@ -366,5 +371,5 @@ export async function adminUpdateSubscription(ctx: AppContext, email: string, co
     }
   }
   await logEvent(ctx, { companyId, userId: null, type: 'subscription_admin_update', data: { by: email, ...input } });
-  return adminRow(ctx, c);
+  return adminRow(ctx, company!);
 }

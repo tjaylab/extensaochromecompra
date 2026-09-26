@@ -136,6 +136,8 @@ export interface AdminCompanyDTO {
   tokens: { input: number; output: number };
   asaas_subscription_id: string | null;
   discount_percent: number;
+  /** Demo company: Omie simulated. */
+  demo: boolean;
 }
 
 export const AdminSubscriptionInput = z.object({
@@ -150,6 +152,8 @@ export const AdminSubscriptionInput = z.object({
   custom_readings: z.number().int().min(0).max(10_000_000).nullish(),
   /** Founder / negotiated discount, in percent (also updates the Asaas subscription, if any). */
   discount_percent: z.number().int().min(0).max(90).optional(),
+  /** Demo company (Omie simulated): for Chrome Web Store reviewers and sales demos. */
+  demo: z.boolean().optional(),
   /** Marks the period as paid (manual billing): active until period_end or one cycle from today. */
   mark_paid: z.boolean().optional(),
 });

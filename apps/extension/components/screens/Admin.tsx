@@ -41,6 +41,7 @@ export function Admin() {
                   <strong>{c.name}</strong>
                   <span className="small muted">
                     {PLANS[c.plan].name} · {c.cycle === 'yearly' ? 'anual' : 'mensal'} · até {isoToBr(c.period_end)}
+                    {c.demo ? ' · demonstração' : ''}
                   </span>
                 </span>
                 <StatusBadge status={STATUS_BADGE[c.status]} label={SUBSCRIPTION_STATUS_LABEL[c.status]} />
@@ -156,6 +157,19 @@ function Editor({ c, onSaved }: { c: AdminCompanyDTO; onSaved: (c: AdminCompanyD
           </button>
         </>
       )}
+      <label className="row" style={{ gap: 8, alignItems: 'flex-start', cursor: 'pointer' }}>
+        <input
+          type="checkbox"
+          checked={c.demo}
+          disabled={busy}
+          onChange={(e) => save({ demo: e.target.checked }, e.target.checked ? 'Modo demonstração ligado: o Omie desta empresa agora é simulado.' : 'Modo demonstração desligado.')}
+          style={{ width: 18, height: 18, marginTop: 2 }}
+        />
+        <span className="stack" style={{ gap: 0 }}>
+          <span>Modo demonstração</span>
+          <span className="small muted">Omie simulado, com fornecedores, produtos e pedidos de exemplo. Para o revisor da Chrome Web Store e demonstrações de venda.</span>
+        </span>
+      </label>
       <button type="button" className="btn-link small" style={{ alignSelf: 'flex-start', color: 'var(--danger-ink)' }} disabled={busy} onClick={() => window.confirm(`Cancelar a assinatura de ${c.name}? A IA para de ler para esta empresa.`) && save({ status: 'canceled' }, 'Assinatura cancelada.')}>
         Cancelar assinatura
       </button>

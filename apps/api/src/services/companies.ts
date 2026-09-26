@@ -28,10 +28,10 @@ export async function resolveMember(ctx: AppContext, user: AuthUser): Promise<Me
 }
 
 export async function getMe(ctx: AppContext, user: AuthUser, member: Member | null): Promise<MeDTO> {
-  const mode = ctx.cfg.OMIE_MODE;
   const is_superadmin = isSuperadmin(ctx, user.email);
-  if (!member) return { user, company: null, role: null, omie: { status: 'not_configured', checked_at: null, mode }, is_superadmin };
+  if (!member) return { user, company: null, role: null, omie: { status: 'not_configured', checked_at: null, mode: ctx.cfg.OMIE_MODE }, is_superadmin };
   const [c] = await ctx.db.select().from(companies).where(eq(companies.id, member.companyId)).limit(1);
+  const mode = ctx.cfg.OMIE_MODE === 'mock' || c.demo ? 'mock' : 'live';
   return {
     user,
     company: { id: c.id, name: c.name, cnpj: c.cnpj },
@@ -96,10 +96,11 @@ function liveGateway(ctx: AppContext, appKey: string, appSecret: string): OmieGa
     : new LiveOmie(appKey, appSecret, fetch, (msg, data) => ctx.log.info({ ...data }, msg));
 }
 
-/** The Omie gateway for a company: simulated in OMIE_MODE=mock, otherwise its stored credentials. */
+/** The Omie gateway for a company: simulated in OMIE_MODE=mock and for demo companies, otherwise its stored credentials. */
 export async function getOmie(ctx: AppContext, companyId: string): Promise<OmieGateway> {
   if (ctx.cfg.OMIE_MODE === 'mock') return new MockOmie(companyId);
   const [c] = await ctx.db.select().from(companies).where(eq(companies.id, companyId)).limit(1);
+  if (c?.demo) return new MockOmie(companyId);
   if (!c?.omieAppKeyEnc || !c.omieAppSecretEnc) {
     throw new HttpError(409, 'omie_not_configured', 'Conecte a conta Omie em Configurações antes de continuar.');
   }
@@ -111,7 +112,8 @@ export async function saveOmieCredentials(ctx: AppContext, member: Member, input
   const appKey = input.app_key.trim();
   const appSecret = input.app_secret.trim();
   if (!appKey || !appSecret) throw badRequest('Informe App Key e App Secret');
-  const gateway = ctx.cfg.OMIE_MODE === 'mock' ? new MockOmie(member.companyId) : liveGateway(ctx, appKey, appSecret);
+  const [company] = await ctx.db.select({ demo: companies.demo }).from(companies).where(eq(companies.id, member.companyId)).limit(1);
+  const gateway = ctx.cfg.OMIE_MODE === 'mock' || company?.demo ? new MockOmie(member.companyId) : liveGateway(ctx, appKey, appSecret);
   try {
     await gateway.testConnection();
   } catch (err) {
