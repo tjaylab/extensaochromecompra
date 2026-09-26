@@ -90,6 +90,15 @@ describe('checkout and Asaas webhook', () => {
     expect((await buyer().get('/v1/me')).body.is_superadmin).toBe(false);
   });
 
+  it('applies the founder discount to the Asaas subscription and the panel', async () => {
+    const sub = [...payments.subscriptions.keys()][0]!;
+    expect((await admin({ discount_percent: 40 })).body.discount_percent).toBe(40);
+    expect(payments.subscriptions.get(sub)).toMatchObject({ value: 2982 }); // Profissional anual 4.970 − 40%
+    await buyer().post('/v1/billing/checkout', { plan: 'profissional', cycle: 'monthly' });
+    expect(payments.subscriptions.get(sub)).toMatchObject({ value: 298.2, cycle: 'monthly' });
+    expect((await buyer().get('/v1/billing')).body.discount_percent).toBe(40);
+  });
+
   it('marks a period as paid by hand (manual billing)', async () => {
     const r = await admin({ mark_paid: true, cycle: 'monthly' });
     expect(r.body).toMatchObject({ status: 'active', cycle: 'monthly' });

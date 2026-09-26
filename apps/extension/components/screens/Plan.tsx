@@ -5,6 +5,7 @@ import {
   isoToBr,
   isValidCnpj,
   onlyDigits,
+  planPrice,
   SUBSCRIPTION_STATUS_LABEL,
   USAGE_WARNING,
   type BillingCycle,
@@ -55,8 +56,11 @@ function PlanBody({ b, onChange }: { b: BillingDTO; onChange: (b: BillingDTO) =>
             ? trialEnded
               ? `O teste terminou em ${isoToBr(b.trial_ends_at)}. Escolha um plano para a IA voltar a ler.`
               : `Teste grátis até ${isoToBr(b.trial_ends_at)}.`
-            : `${formatMoney(b.cycle === 'yearly' ? b.plan.yearly : b.plan.monthly, 'BRL')} por ${b.cycle === 'yearly' ? 'ano' : 'mês'}`}
+            : `${formatMoney(planPrice(b.plan, b.cycle, b.discount_percent), 'BRL')} por ${b.cycle === 'yearly' ? 'ano' : 'mês'}`}
         </span>
+        {b.discount_percent > 0 && (
+          <span className="small" style={{ color: 'var(--success-ink)', fontWeight: 600 }}>Preço de cliente fundador: {b.discount_percent}% de desconto em todos os planos</span>
+        )}
         {b.invoice_url && (
           <button type="button" className="btn btn-primary" onClick={() => openPage(b.invoice_url!)}>
             {b.status === 'past_due' ? 'Pagar fatura em aberto' : 'Pagar fatura'}
@@ -96,6 +100,7 @@ function PlanBody({ b, onChange }: { b: BillingDTO; onChange: (b: BillingDTO) =>
           key={p.id}
           p={p}
           cycle={cycle}
+          discount={b.discount_percent}
           current={p.id === b.plan.id && cycle === b.cycle && b.status !== 'trialing'}
           canChange={me.role === 'admin'}
           onChoose={() => setChoosing(p.id)}
@@ -139,13 +144,15 @@ function Meter({ label, used, limit, hint }: { label: string; used: number; limi
   );
 }
 
-function PlanCard({ p, cycle, current, canChange, onChoose }: { p: PlanInfo; cycle: BillingCycle; current: boolean; canChange: boolean; onChoose: () => void }) {
-  const price = cycle === 'yearly' ? p.yearly : p.monthly;
+function PlanCard({ p, cycle, discount, current, canChange, onChoose }: { p: PlanInfo; cycle: BillingCycle; discount: number; current: boolean; canChange: boolean; onChoose: () => void }) {
+  const full = cycle === 'yearly' ? p.yearly : p.monthly;
+  const price = planPrice(p, cycle, discount);
   return (
     <section className={`card plan-card ${current ? 'plan-current' : ''}`} aria-label={`Plano ${p.name}`}>
       <div className="row-between">
         <strong style={{ fontSize: 16 }}>{p.name}</strong>
         <span className="stack" style={{ gap: 0, alignItems: 'flex-end' }}>
+          {discount > 0 && <s className="small muted mono">{formatMoney(full, 'BRL')}</s>}
           <strong className="mono">{formatMoney(price, 'BRL')}</strong>
           <span className="small muted">por {cycle === 'yearly' ? 'ano' : 'mês'}</span>
         </span>
@@ -215,7 +222,7 @@ function CheckoutForm({ b, plan, cycle, onCancel, onDone }: { b: BillingDTO; pla
       }}
     >
       <span className="section-label">
-        Assinar {plan.name} · {formatMoney(cycle === 'yearly' ? plan.yearly : plan.monthly, 'BRL')}/{cycle === 'yearly' ? 'ano' : 'mês'}
+        Assinar {plan.name} · {formatMoney(planPrice(plan, cycle, b.discount_percent), 'BRL')}/{cycle === 'yearly' ? 'ano' : 'mês'}
       </span>
       {!hasCnpj && (
         <Field id="ck-cnpj" label="CNPJ da empresa" error={digits.length === 14 && !isValidCnpj(digits) ? 'CNPJ inválido' : null}>

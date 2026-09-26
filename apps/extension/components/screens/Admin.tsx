@@ -49,7 +49,7 @@ export function Admin() {
                 <span>Leituras: <span className="mono">{c.readings.used}/{c.readings.limit}</span></span>
                 <span>Compradores: <span className="mono">{c.seats.used}/{c.seats.limit ?? '∞'}</span></span>
                 <span>Tokens: <span className="mono">{compact.format(c.tokens.input)} in · {compact.format(c.tokens.output)} out</span></span>
-                <span>{c.cnpj ? formatCnpj(c.cnpj) : 'sem CNPJ'}</span>
+                <span>{c.cnpj ? formatCnpj(c.cnpj) : 'sem CNPJ'}{c.discount_percent ? ` · −${c.discount_percent}%` : ''}</span>
               </div>
               {open === c.id && <Editor c={c} onSaved={replace} />}
             </section>
@@ -76,6 +76,7 @@ function Editor({ c, onSaved }: { c: AdminCompanyDTO; onSaved: (c: AdminCompanyD
   const [days, setDays] = useState('');
   const [seats, setSeats] = useState('');
   const [readings, setReadings] = useState('');
+  const [discount, setDiscount] = useState(String(c.discount_percent || ''));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
@@ -125,6 +126,14 @@ function Editor({ c, onSaved }: { c: AdminCompanyDTO; onSaved: (c: AdminCompanyD
       <div className="row" style={{ flexWrap: 'wrap' }}>
         <button type="button" className="btn btn-secondary" disabled={busy || !days} onClick={() => save({ status: 'trialing', trial_ends_at: inDays(Number(days)) }, `Teste estendido por ${days} dias.`)}>Estender teste</button>
         <button type="button" className="btn btn-secondary" disabled={busy || !extra} onClick={() => save({ extra_readings: Number(extra) }, `${extra} leituras extras liberadas.`)}>Liberar leituras</button>
+      </div>
+      <div className="row" style={{ alignItems: 'flex-end' }}>
+        <Field id={`d-${c.id}`} label="Desconto de fundador (%)" className="grow">
+          <input id={`d-${c.id}`} className="input" inputMode="numeric" value={discount} onChange={(e) => setDiscount(e.target.value.replace(/\D/g, '').slice(0, 2))} placeholder="ex.: 40" />
+        </Field>
+        <button type="button" className="btn btn-secondary" disabled={busy} onClick={() => save({ discount_percent: Number(discount || 0) }, discount && discount !== '0' ? `Desconto de ${discount}% aplicado.` : 'Desconto removido.')}>
+          Aplicar
+        </button>
       </div>
       {plan === 'empresa' && (
         <>

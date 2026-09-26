@@ -241,6 +241,7 @@ export const subscriptions = pgTable('subscriptions', {
   periodStart: ts('period_start').notNull(),
   periodEnd: ts('period_end').notNull(),
   extraReadings: integer('extra_readings').notNull().default(0),
+  discountPercent: integer('discount_percent').notNull().default(0),
   customSeats: integer('custom_seats'),
   customReadings: integer('custom_readings'),
   asaasCustomerId: text('asaas_customer_id'),

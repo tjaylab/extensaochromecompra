@@ -66,6 +66,12 @@ export const GRACE_DAYS = 7;
 /** Share of the readings at which the panel warns. */
 export const USAGE_WARNING = 0.8;
 
+/** Plan price after the company's discount (founders), in BRL, rounded to cents. */
+export function planPrice(plan: Plan, cycle: BillingCycle, discountPercent = 0): number {
+  const base = cycle === 'yearly' ? plan.yearly : plan.monthly;
+  return Math.round(base * (100 - discountPercent)) / 100;
+}
+
 export type SubscriptionStatus = 'trialing' | 'active' | 'past_due' | 'canceled';
 
 export const SUBSCRIPTION_STATUS_LABEL: Record<SubscriptionStatus, string> = {
@@ -92,6 +98,8 @@ export interface BillingDTO {
   invoice_url: string | null;
   /** Online payment is set up on the server. */
   payments_enabled: boolean;
+  /** Founder / negotiated discount on every plan, in percent. */
+  discount_percent: number;
   plans: Plan[];
 }
 
@@ -127,6 +135,7 @@ export interface AdminCompanyDTO {
   /** AI tokens this period, for the cost estimate. */
   tokens: { input: number; output: number };
   asaas_subscription_id: string | null;
+  discount_percent: number;
 }
 
 export const AdminSubscriptionInput = z.object({
@@ -139,6 +148,8 @@ export const AdminSubscriptionInput = z.object({
   extra_readings: z.number().int().min(0).max(1_000_000).optional(),
   custom_seats: z.number().int().min(1).max(10_000).nullish(),
   custom_readings: z.number().int().min(0).max(10_000_000).nullish(),
+  /** Founder / negotiated discount, in percent (also updates the Asaas subscription, if any). */
+  discount_percent: z.number().int().min(0).max(90).optional(),
   /** Marks the period as paid (manual billing): active until period_end or one cycle from today. */
   mark_paid: z.boolean().optional(),
 });

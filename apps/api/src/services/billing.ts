@@ -4,6 +4,7 @@ import {
   isValidCnpj,
   onlyDigits,
   PLAN_IDS,
+  planPrice,
   PLANS,
   TRIAL_DAYS,
   TRIAL_PLAN,
@@ -114,6 +115,7 @@ export async function getBilling(ctx: AppContext, member: Member): Promise<Billi
     blocked_reason: blocked,
     invoice_url: st.status === 'active' ? null : s.invoiceUrl,
     payments_enabled: !!ctx.payments,
+    discount_percent: s.discountPercent,
     plans: PLAN_IDS.map((id) => PLANS[id]),
   };
 }
@@ -173,8 +175,8 @@ export async function checkout(ctx: AppContext, member: Member, input: CheckoutI
   if (cnpj !== company!.cnpj) await ctx.db.update(companies).set({ cnpj }).where(eq(companies.id, member.companyId));
 
   const s = await ensureSubscription(ctx, member.companyId);
-  const value = input.cycle === 'yearly' ? plan.yearly : plan.monthly;
-  const description = `ProcureMate ${plan.name} (${input.cycle === 'yearly' ? 'anual' : 'mensal'})`;
+  const value = planPrice(plan, input.cycle, s.discountPercent);
+  const description = `ProcureMate ${plan.name} (${input.cycle === 'yearly' ? 'anual' : 'mensal'})${s.discountPercent ? ` · ${s.discountPercent}% de desconto` : ''}`;
   try {
     const customer =
       s.asaasCustomerId ?? (await payments.createCustomer({ name: company!.name, cpfCnpj: cnpj, email: input.email || member.email, externalReference: member.companyId }));
@@ -286,6 +288,7 @@ async function adminRow(ctx: AppContext, c: typeof companies.$inferSelect): Prom
     readings: { used: used.readings, limit: limits.readings },
     tokens: { input: used.input, output: used.output },
     asaas_subscription_id: s.asaasSubscriptionId,
+    discount_percent: s.discountPercent,
   };
 }
 
@@ -308,6 +311,7 @@ export async function adminUpdateSubscription(ctx: AppContext, email: string, co
   if (input.extra_readings !== undefined) set.extraReadings = input.extra_readings;
   if (input.custom_seats !== undefined) set.customSeats = input.custom_seats;
   if (input.custom_readings !== undefined) set.customReadings = input.custom_readings;
+  if (input.discount_percent !== undefined) set.discountPercent = input.discount_percent;
   if (input.trial_ends_at !== undefined) {
     set.trialEndsAt = input.trial_ends_at ? iso(new Date(input.trial_ends_at)) : null;
     if (set.trialEndsAt && (input.status ?? s.status) === 'trialing') set.periodEnd = set.trialEndsAt;
@@ -324,6 +328,22 @@ export async function adminUpdateSubscription(ctx: AppContext, email: string, co
     });
   }
   await ctx.db.update(subscriptions).set(set).where(eq(subscriptions.companyId, companyId));
+  // Keep the Asaas subscription's price in step with the plan and the discount.
+  if (s.asaasSubscriptionId && ctx.payments && (input.plan || input.cycle || input.discount_percent !== undefined)) {
+    const plan = PLANS[input.plan ?? s.plan];
+    const cycle = input.cycle ?? s.cycle;
+    const discount = input.discount_percent ?? s.discountPercent;
+    try {
+      await ctx.payments.updateSubscription(s.asaasSubscriptionId, {
+        value: planPrice(plan, cycle, discount),
+        cycle,
+        billingType: 'UNDEFINED',
+        description: `ProcureMate ${plan.name} (${cycle === 'yearly' ? 'anual' : 'mensal'})${discount ? ` · ${discount}% de desconto` : ''}`,
+      });
+    } catch (err) {
+      throw new HttpError(502, 'payments_error', `Salvo no ProcureMate, mas o Asaas recusou a atualização: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
   await logEvent(ctx, { companyId, userId: null, type: 'subscription_admin_update', data: { by: email, ...input } });
   return adminRow(ctx, c);
 }

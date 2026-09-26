@@ -202,3 +202,4 @@ textarea.input { height: auto; padding-top: 8px; padding-bottom: 8px; resize: ve
 .plan-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
 .plan-list li { display: flex; align-items: center; gap: 6px; }
 .plan-list svg { color: var(--success); flex: none; }
+.row > .grow { flex: 1; min-width: 0; }
