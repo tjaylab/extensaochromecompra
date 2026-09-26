@@ -12,6 +12,7 @@ import {
 import type { AppContext, Member } from '../context.js';
 import { extractions } from '../db/schema.js';
 import { HttpError } from '../lib/errors.js';
+import { assertCanRead, recordUsage } from './billing.js';
 import { logEvent } from './events.js';
 import { matchSupplier } from './suppliers.js';
 
@@ -29,9 +30,11 @@ function rateLimit(userId: string) {
 
 export async function runExtraction(ctx: AppContext, member: Member, input: ExtractionRequest): Promise<ExtractionResponse> {
   rateLimit(member.userId);
+  await assertCanRead(ctx, member.companyId);
   const conversation = input.conversation?.filter((m) => m.text.trim()) ?? null;
   const attachments = input.attachments ?? [];
   const result = await ctx.extractor({ text: input.text, conversation, attachments, contactName: input.contact_name, today: todayIso() });
+  await recordUsage(ctx, member, 'extraction', result);
   // Everything sent to the model is kept on the extraction (audit and quality review). Files are
   // referenced by name, size and hash, not stored.
   const files = attachments.map((a) => attachmentLabel(a));
@@ -113,7 +116,9 @@ export async function runScan(ctx: AppContext, member: Member, input: ScanReques
   const started = Date.now();
   const conversation = input.conversation.filter((m) => m.text.trim());
   if (!conversation.length) return { proposals: [], latency_ms: 0 };
+  await assertCanRead(ctx, member.companyId);
   const result = await ctx.scanner({ conversation, contactName: input.contact_name, today: todayIso() });
+  await recordUsage(ctx, member, 'scan', result);
   const supplierMatch = result.proposals.length
     ? await matchSupplier(ctx, member.companyId, {
         contactPhone: input.contact_phone,

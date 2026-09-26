@@ -29,6 +29,15 @@ const Env = z.object({
   // Optional: e-mail purchase orders to suppliers (resend.com). Without it the panel opens the buyer's e-mail app.
   RESEND_API_KEY: z.string().optional(),
   EMAIL_FROM: z.string().optional(), // e.g. "Compras Um Grau e Meio <compras@seudominio.com.br>"
+  // Payments (asaas.com). "sandbox" for tests with the sandbox account, "production" for real charges.
+  ASAAS_API_KEY: z.string().optional(),
+  ASAAS_ENV: z.enum(['sandbox', 'production']).default('sandbox'),
+  // Secret set on the Asaas webhook (Integrações > Webhooks > Token de autenticação); checked on every call.
+  ASAAS_WEBHOOK_TOKEN: z.string().optional(),
+  // "mock" simulates Asaas in memory (tests, local development).
+  PAYMENTS_MODE: z.enum(['live', 'mock']).optional(),
+  // Comma-separated e-mails of the ProcureMate team: they see the admin panel (all companies and plans).
+  SUPERADMIN_EMAILS: z.string().optional(),
 });
 
 export type Config = z.infer<typeof Env> & { EXTRACTION_MODE: 'claude' | 'mock' };

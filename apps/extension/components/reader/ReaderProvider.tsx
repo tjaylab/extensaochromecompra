@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { looksLikeProposal, type Attachment, type ConversationMessage, type ExtractionResponse } from '@compras/shared';
-import { api } from '../../lib/api';
+import { ApiError, api } from '../../lib/api';
 import { quoteFromExtraction } from '../../lib/auto-quote';
 import {
   AUTO_READ_KEY,
@@ -57,6 +57,8 @@ interface Reader {
   addFiles: (files: Attachment[]) => void;
   /** Reads again everything loaded in the open conversation. */
   reload: () => void;
+  /** Automatic reading is paused: the plan's readings ran out or the subscription is inactive. */
+  paused: string | null;
 }
 
 const ReaderContext = createContext<Reader | null>(null);
@@ -89,6 +91,27 @@ export function ReaderProvider({ children }: { children: ReactNode }) {
   const rescan = useRef<Set<string>>(new Set());
   // One image or PDF at a time: WhatsApp hands over one document per click.
   const mediaQueue = useRef<Promise<unknown>>(Promise.resolve());
+  // The plan stopped AI readings (402 from the API): nothing is read automatically until the buyer reloads.
+  const [paused, setPausedState] = useState<string | null>(null);
+  const pausedRef = useRef<string | null>(null);
+  const setPaused = (p: string | null) => {
+    pausedRef.current = p;
+    setPausedState(p);
+  };
+  /** True when the error is the plan stopping readings (and pauses automatic reading). */
+  const planStop = (e: unknown) => {
+    if (e instanceof ApiError && e.status === 402) {
+      setPaused(e.message);
+      return true;
+    }
+    return false;
+  };
+  useEffect(() => {
+    api
+      .billing()
+      .then((b) => !b.can_read && setPaused(b.blocked_reason === 'reading_limit' ? 'As leituras de IA do plano acabaram neste mês.' : 'A assinatura está inativa.'))
+      .catch(() => {});
+  }, []);
 
   const update = (key: string, contact: ContactResponse, fn: (s: ChatState) => ChatState) => {
     const prev = ref.current;
@@ -187,6 +210,7 @@ export function ReaderProvider({ children }: { children: ReactNode }) {
       });
       return;
     }
+    if (pausedRef.current) return; // the messages stay pending: read once the plan allows
     const first = st.messages.indexOf(pending[0]!);
     const last = st.messages.indexOf(pending[pending.length - 1]!);
     const chunk = st.messages.slice(Math.max(0, first - CONTEXT_BEFORE), last + 1).slice(-300);
@@ -203,7 +227,8 @@ export function ReaderProvider({ children }: { children: ReactNode }) {
       });
       update(key, st.contact, (x) => ({ ...x, scanned: [...new Set([...x.scanned, ...chunk.map((m) => m.id!).filter(Boolean)])] }));
     } catch (e) {
-      addActivity(key, st.contact, { id: aid, kind: 'error', text: e instanceof Error ? e.message : String(e), done: true });
+      if (planStop(e)) update(key, st.contact, (x) => ({ ...x, activities: x.activities.filter((a) => a.id !== aid) }));
+      else addActivity(key, st.contact, { id: aid, kind: 'error', text: e instanceof Error ? e.message : String(e), done: true });
     } finally {
       update(key, st.contact, (x) => ({ ...x, busy: false }));
       persist(key);
@@ -233,6 +258,7 @@ export function ReaderProvider({ children }: { children: ReactNode }) {
     const s = ref.current[key];
     if (s?.scanned.includes(m.id)) return;
     const label = m.kind === 'pdf' ? `o PDF "${m.name}"` : 'a imagem';
+    if (pausedRef.current && !force) return;
     const known = await ensureKnown(key, contact);
     if (!known && !force && !ref.current[key]?.manual) {
       addActivity(key, contact, {
@@ -256,6 +282,10 @@ export function ReaderProvider({ children }: { children: ReactNode }) {
         addActivity(key, contact, { id: aid, kind: 'found', text: `Cotação encontrada em ${label}`, done: true });
       } else addActivity(key, contact, { id: aid, kind: 'none', text: `${label.charAt(0).toUpperCase()}${label.slice(1)} não tem cotação`, done: true });
     } catch (e) {
+      if (planStop(e)) {
+        update(key, contact, (x) => ({ ...x, scanned: x.scanned.filter((id) => id !== m.id), activities: x.activities.filter((a) => a.id !== aid) }));
+        return;
+      }
       addActivity(key, contact, {
         id: aid,
         kind: 'error',
@@ -362,7 +392,8 @@ export function ReaderProvider({ children }: { children: ReactNode }) {
         addActivity(key, contact, { id: aid, kind: 'found', text: `Cotação encontrada em ${label}`, done: true });
       } else addActivity(key, contact, { id: aid, kind: 'none', text: `Não encontrei cotação em ${label}`, done: true });
     } catch (e) {
-      addActivity(key, contact, { id: aid, kind: 'error', text: e instanceof Error ? e.message : String(e), done: true });
+      if (planStop(e)) update(key, contact, (x) => ({ ...x, activities: x.activities.filter((a) => a.id !== aid) }));
+      else addActivity(key, contact, { id: aid, kind: 'error', text: e instanceof Error ? e.message : String(e), done: true });
     }
   };
 
@@ -430,7 +461,18 @@ export function ReaderProvider({ children }: { children: ReactNode }) {
       const key = current?.key ?? FILES_CHAT;
       for (const f of files) readFile(key, contact, f, f.media_type === 'application/pdf' ? 'pdf' : 'file');
     },
-    reload: () => active && sync(active),
+    reload: () => {
+      // The buyer may have changed plan meanwhile: check again before reading.
+      api
+        .billing()
+        .then((b) => b.can_read && setPaused(null))
+        .catch(() => {})
+        .finally(() => {
+          if (active) sync(active);
+          if (current && !pausedRef.current) schedule(current.key);
+        });
+    },
+    paused,
   };
 
   return <ReaderContext.Provider value={reader}>{children}</ReaderContext.Provider>;

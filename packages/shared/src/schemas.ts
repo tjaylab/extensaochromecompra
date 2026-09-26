@@ -424,6 +424,8 @@ export interface MeDTO {
   company: { id: string; name: string; cnpj: string | null } | null;
   role: 'admin' | 'buyer' | null;
   omie: { status: OmieStatus; checked_at: string | null; mode: 'live' | 'mock' };
+  /** Member of the ProcureMate team: sees the admin panel (all companies and plans). */
+  is_superadmin?: boolean;
 }
 
 export interface MetricsDTO {

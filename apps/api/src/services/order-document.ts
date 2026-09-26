@@ -2,6 +2,7 @@ import PDFDocument from 'pdfkit';
 import { eq } from 'drizzle-orm';
 import { formatCnpj, formatDecimal, formatMoney, isoToBr, ORDER_STATUS_LABEL, type OrderDTO } from '@compras/shared';
 import type { AppContext, Member } from '../context.js';
+import { assertFeature } from './billing.js';
 import { companies } from '../db/schema.js';
 import { badRequest, HttpError } from '../lib/errors.js';
 import { logEvent } from './events.js';
@@ -109,6 +110,7 @@ export async function renderOrderPdf(ctx: AppContext, member: Member, id: string
 
 /** E-mails the order PDF to the supplier (Resend). Without e-mail configured, the panel falls back to mailto. */
 export async function emailOrder(ctx: AppContext, member: Member, id: string, input: { to: string; message?: string | null }) {
+  await assertFeature(ctx, member.companyId, 'order_email', 'O envio do pedido por e-mail');
   if (!ctx.cfg.RESEND_API_KEY || !ctx.cfg.EMAIL_FROM) {
     throw new HttpError(409, 'email_not_configured', 'Envio de e-mail não configurado no servidor.');
   }

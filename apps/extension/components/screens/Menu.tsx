@@ -84,8 +84,8 @@ function Manage() {
   const nav = useNav();
   const { me } = useSession();
   const counts = useLoad(async () => {
-    const [quotes, reqs, orders] = await Promise.all([api.quotes(), api.requisitions('open'), api.orders()]);
-    return { quotes: quotes.length, reqs: reqs.length, orders: orders.length };
+    const [quotes, reqs, orders, billing] = await Promise.all([api.quotes(), api.requisitions('open'), api.orders(), api.billing().catch(() => null)]);
+    return { quotes: quotes.length, reqs: reqs.length, orders: orders.length, billing };
   });
 
   return (
@@ -120,9 +120,20 @@ function Manage() {
         <button type="button" className="btn btn-secondary btn-lg" onClick={() => nav.go({ name: 'suppliers' })}>
           Fornecedores
         </button>
+        <button type="button" className="btn btn-secondary btn-lg" onClick={() => nav.go({ name: 'plan' })}>
+          Plano e uso{' '}
+          <span className="count">
+            {counts.data?.billing ? `${counts.data.billing.plan.name} · ${counts.data.billing.usage.readings}/${counts.data.billing.limits.readings} leituras` : ''}
+          </span>
+        </button>
         <button type="button" className="btn btn-secondary btn-lg" onClick={() => nav.go({ name: 'settings' })}>
           <Icon name="settings" /> Configurações
         </button>
+        {me.is_superadmin && (
+          <button type="button" className="btn btn-outline btn-lg" onClick={() => nav.go({ name: 'admin' })}>
+            Painel ProcureMate
+          </button>
+        )}
       </div>
     </>
   );

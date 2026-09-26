@@ -16,7 +16,9 @@ export type Route =
   | { name: 'order'; id: string }
   | { name: 'orders' }
   | { name: 'suppliers' }
-  | { name: 'settings' };
+  | { name: 'settings' }
+  | { name: 'plan' }
+  | { name: 'admin' };
 
 export interface Nav {
   route: Route;

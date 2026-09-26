@@ -193,3 +193,12 @@ table.cmp .missing-value { color: #8a4a07; font-style: italic; }
 .file-tile:active { cursor: grabbing; }
 .file-tile strong { color: var(--ink); }
 textarea.input { height: auto; padding-top: 8px; padding-bottom: 8px; resize: vertical; font: inherit; }
+
+/* Plano e uso */
+.meter { height: 8px; border-radius: 999px; background: #E2E8F0; overflow: hidden; }
+.meter span { display: block; height: 100%; border-radius: 999px; transition: width .3s ease; }
+.plan-card { gap: 10px; }
+.plan-current { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+.plan-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+.plan-list li { display: flex; align-items: center; gap: 6px; }
+.plan-list svg { color: var(--success); flex: none; }

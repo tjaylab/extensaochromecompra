@@ -12,10 +12,12 @@ import {
   UpdateOrderInput,
   UpdateQuoteInput,
 } from '@compras/shared';
+import { AdminSubscriptionInput, CheckoutInput } from '@compras/shared';
 import type { AppContext, Member } from './context.js';
 import { badRequest, HttpError } from './lib/errors.js';
 import { listPaymentTerms, searchProducts, syncPaymentTerms, syncProducts } from './services/catalog.js';
 import { checkOmie, createCompany, getMe, inviteMember, listMembers, resolveMember, saveOmieCredentials } from './services/companies.js';
+import { adminListCompanies, adminUpdateSubscription, checkout, getBilling, handleAsaasWebhook } from './services/billing.js';
 import { logEvent } from './services/events.js';
 import { runExtraction, runScan } from './services/extractions.js';
 import { getMetrics } from './services/metrics.js';
@@ -180,4 +182,17 @@ export function registerRoutes(app: FastifyInstance, ctx: AppContext) {
   });
 
   app.get('/v1/metrics', async (req) => getMetrics(ctx, member(req)));
+
+  // --- Plan and usage ------------------------------------------------------
+  app.get('/v1/billing', async (req) => getBilling(ctx, member(req)));
+  app.post('/v1/billing/checkout', async (req) => checkout(ctx, member(req), parse(CheckoutInput, req.body)));
+
+  // Asaas calls this (outside /v1: no user session; authenticated by the webhook token).
+  app.post('/webhooks/asaas', async (req) => handleAsaasWebhook(ctx, req.headers['asaas-access-token'] as string | undefined, req.body));
+
+  // --- ProcureMate team (SUPERADMIN_EMAILS) --------------------------------
+  app.get('/v1/admin/companies', async (req) => adminListCompanies(ctx, req.user!.email));
+  app.patch('/v1/admin/companies/:id/subscription', async (req) =>
+    adminUpdateSubscription(ctx, req.user!.email, parse(Id, req.params).id, parse(AdminSubscriptionInput, req.body)),
+  );
 }

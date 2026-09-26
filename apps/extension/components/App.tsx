@@ -13,6 +13,8 @@ import { QuoteDetail } from './screens/QuoteDetail';
 import { Quotes } from './screens/Quotes';
 import { Requisitions } from './screens/Requisitions';
 import { Review } from './screens/Review';
+import { Admin } from './screens/Admin';
+import { Plan } from './screens/Plan';
 import { Settings } from './screens/Settings';
 import { Suppliers } from './screens/Suppliers';
 import { ErrorBanner, NavContext, SessionContext, Spinner, type Nav, type Route, type Session } from './ui';
@@ -106,6 +108,8 @@ export function App() {
         {r.name === 'orders' && <Orders />}
         {r.name === 'suppliers' && <Suppliers />}
         {r.name === 'settings' && <Settings />}
+        {r.name === 'plan' && <Plan />}
+        {r.name === 'admin' && <Admin />}
         </ReaderProvider>
       </NavContext.Provider>
     </SessionContext.Provider>

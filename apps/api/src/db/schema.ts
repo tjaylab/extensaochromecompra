@@ -231,3 +231,30 @@ export const events = pgTable('events', {
   data: jsonb('data'),
   occurredAt: ts('occurred_at').notNull().defaultNow(),
 });
+
+export const subscriptions = pgTable('subscriptions', {
+  companyId: uuid('company_id').primaryKey(),
+  plan: text('plan').$type<'essencial' | 'profissional' | 'empresa'>().notNull(),
+  status: text('status').$type<'trialing' | 'active' | 'past_due' | 'canceled'>().notNull(),
+  cycle: text('cycle').$type<'monthly' | 'yearly'>().notNull().default('monthly'),
+  trialEndsAt: ts('trial_ends_at'),
+  periodStart: ts('period_start').notNull(),
+  periodEnd: ts('period_end').notNull(),
+  extraReadings: integer('extra_readings').notNull().default(0),
+  customSeats: integer('custom_seats'),
+  customReadings: integer('custom_readings'),
+  asaasCustomerId: text('asaas_customer_id'),
+  asaasSubscriptionId: text('asaas_subscription_id'),
+  invoiceUrl: text('invoice_url'),
+  updatedAt: ts('updated_at').notNull().defaultNow(),
+});
+
+export const aiUsage = pgTable('ai_usage', {
+  id: bigserial('id', { mode: 'number' }).primaryKey(),
+  companyId: uuid('company_id').notNull(),
+  userId: uuid('user_id'),
+  kind: text('kind').$type<'extraction' | 'scan'>().notNull(),
+  inputTokens: integer('input_tokens'),
+  outputTokens: integer('output_tokens'),
+  createdAt: ts('created_at').notNull().defaultNow(),
+});

@@ -8,6 +8,7 @@ import { createTokenVerifier, type AuthUser, type VerifyToken } from './lib/auth
 import { Secrets } from './lib/crypto.js';
 import { HttpError } from './lib/errors.js';
 import type { OmieGateway } from './omie/gateway.js';
+import { createPayments, type PaymentsGateway } from './payments/asaas.js';
 import { registerRoutes } from './routes.js';
 import { resolveMember } from './services/companies.js';
 import { resumeSendingOrders } from './services/orders.js';
@@ -27,13 +28,15 @@ export interface BuildOptions {
   verifyToken?: VerifyToken;
   jobRetryBaseMs?: number;
   makeLiveOmie?: (appKey: string, appSecret: string) => OmieGateway;
+  /** Overrides the Asaas gateway (null = payments not set up). */
+  payments?: PaymentsGateway | null;
   logger?: boolean;
 }
 
 export async function buildApp(opts: BuildOptions) {
   const { cfg } = opts;
   const app = Fastify({
-    logger: opts.logger === false ? false : { level: cfg.LOG_LEVEL, redact: ['req.headers.authorization', 'body.app_key', 'body.app_secret'] },
+    logger: opts.logger === false ? false : { level: cfg.LOG_LEVEL, redact: ['req.headers.authorization', 'req.headers["asaas-access-token"]', 'body.app_key', 'body.app_secret'] },
     bodyLimit: 256 * 1024,
   });
 
@@ -46,6 +49,7 @@ export async function buildApp(opts: BuildOptions) {
     secrets: new Secrets(cfg.ENCRYPTION_KEY, () => app.log.warn('ENCRYPTION_KEY not set: using an insecure development key')),
     extractor: opts.extractor ?? createExtractor(cfg),
     scanner: opts.scanner ?? createScanner(cfg),
+    payments: opts.payments !== undefined ? opts.payments : createPayments(cfg),
     jobs: new JobRunner(app.log, opts.jobRetryBaseMs ?? 2000),
     log: app.log,
     makeLiveOmie: opts.makeLiveOmie,

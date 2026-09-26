@@ -3,6 +3,7 @@ import type { DB } from './db/client.js';
 import type { Extractor, Scanner } from './extraction/extractor.js';
 import type { Secrets } from './lib/crypto.js';
 import type { OmieGateway } from './omie/gateway.js';
+import type { PaymentsGateway } from './payments/asaas.js';
 
 export interface Logger {
   info(obj: object | string, msg?: string): void;
@@ -25,6 +26,8 @@ export interface AppContext {
   scanner: Scanner;
   jobs: JobRunner;
   log: Logger;
+  /** Asaas (or its simulation); null when online payments are not set up. */
+  payments: PaymentsGateway | null;
   /** Overridable in tests to inject a fake live gateway. */
   makeLiveOmie?: (appKey: string, appSecret: string) => OmieGateway;
 }

@@ -8,6 +8,7 @@ import { OmieError, type OmieGateway } from '../omie/gateway.js';
 import { LiveOmie } from '../omie/live.js';
 import { MockOmie } from '../omie/mock.js';
 import { onlyDigits } from '@compras/shared';
+import { assertSeat, isSuperadmin } from './billing.js';
 import { logEvent } from './events.js';
 
 /** Resolves the user's company membership, accepting a pending invitation on first login. */
@@ -28,7 +29,8 @@ export async function resolveMember(ctx: AppContext, user: AuthUser): Promise<Me
 
 export async function getMe(ctx: AppContext, user: AuthUser, member: Member | null): Promise<MeDTO> {
   const mode = ctx.cfg.OMIE_MODE;
-  if (!member) return { user, company: null, role: null, omie: { status: 'not_configured', checked_at: null, mode } };
+  const is_superadmin = isSuperadmin(ctx, user.email);
+  if (!member) return { user, company: null, role: null, omie: { status: 'not_configured', checked_at: null, mode }, is_superadmin };
   const [c] = await ctx.db.select().from(companies).where(eq(companies.id, member.companyId)).limit(1);
   return {
     user,
@@ -39,6 +41,7 @@ export async function getMe(ctx: AppContext, user: AuthUser, member: Member | nu
       checked_at: mode === 'mock' ? null : c.omieCheckedAt,
       mode,
     },
+    is_superadmin,
   };
 }
 
@@ -62,6 +65,12 @@ export async function inviteMember(ctx: AppContext, member: Member, input: { ema
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) throw badRequest('E-mail inválido');
   const [already] = await ctx.db.select().from(memberships).where(eq(memberships.email, email)).limit(1);
   if (already) throw conflict('Este usuário já pertence a uma empresa');
+  const [pending] = await ctx.db
+    .select()
+    .from(invitations)
+    .where(and(eq(invitations.companyId, member.companyId), eq(invitations.email, email), isNull(invitations.acceptedAt)))
+    .limit(1);
+  if (!pending) await assertSeat(ctx, member.companyId);
   await ctx.db
     .insert(invitations)
     .values({ companyId: member.companyId, email, role: input.role ?? 'buyer' })

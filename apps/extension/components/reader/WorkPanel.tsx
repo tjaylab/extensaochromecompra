@@ -2,12 +2,13 @@ import { useRef, useState, type DragEvent } from 'react';
 import { ATTACHMENT_TYPES, MAX_ATTACHMENT_BYTES, type Attachment } from '@compras/shared';
 import { blobToDataUrl, splitDataUrl } from '../../lib/capture';
 import { ProposalCard } from '../ProposalCard';
-import { ErrorBanner, Icon } from '../ui';
+import { ErrorBanner, Icon, useNav } from '../ui';
 import { useReader, type Activity } from './ReaderProvider';
 
 /** Work: the live reading of the open conversation, the quotes found, and a drop zone for files. */
 export function WorkPanel() {
   const r = useReader();
+  const nav = useNav();
   const c = r.current;
   const who = c ? (c.contact.contactName ?? c.contact.contactPhone) : null;
   const visible = c?.proposals ?? [];
@@ -28,6 +29,18 @@ export function WorkPanel() {
       ) : (
         <div className="card small muted">
           Abra uma conversa no WhatsApp Web. Conforme as mensagens aparecem, inclusive ao rolar para cima, eu leio e encontro as cotações sozinho.
+        </div>
+      )}
+
+      {r.paused && (
+        <div className="banner banner-warn">
+          <Icon name="warn" />
+          <div className="stack" style={{ gap: 6 }}>
+            <span>{r.paused} A leitura automática está pausada; você ainda pode registrar cotações à mão.</span>
+            <button type="button" className="btn-link" style={{ alignSelf: 'flex-start' }} onClick={() => nav.go({ name: 'plan' })}>
+              Ver planos
+            </button>
+          </div>
         </div>
       )}
 

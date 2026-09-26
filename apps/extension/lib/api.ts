@@ -1,4 +1,9 @@
 import type {
+  AdminCompanyDTO,
+  AdminSubscriptionInput,
+  BillingDTO,
+  CheckoutDTO,
+  CheckoutInput,
   Attachment,
   ComparisonDTO,
   ConversationMessage,
@@ -127,4 +132,9 @@ export const api = {
 
   event: (type: string, entity_id?: string, data?: Record<string, unknown>) => request('POST', '/v1/events', { type, entity_id, data }).catch(() => {}),
   metrics: () => request<MetricsDTO>('GET', '/v1/metrics'),
+
+  billing: () => request<BillingDTO>('GET', '/v1/billing'),
+  checkout: (body: Partial<CheckoutInput> & Pick<CheckoutInput, 'plan'>) => request<CheckoutDTO>('POST', '/v1/billing/checkout', body),
+  adminCompanies: () => request<AdminCompanyDTO[]>('GET', '/v1/admin/companies'),
+  adminUpdate: (id: string, body: Partial<AdminSubscriptionInput>) => request<AdminCompanyDTO>('PATCH', `/v1/admin/companies/${id}/subscription`, body),
 };

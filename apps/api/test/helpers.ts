@@ -5,8 +5,8 @@ import { openDatabase } from '../src/db/client.js';
 export const PRD_MESSAGE = 'Consigo 30 fontes Microsemi por USD 111,46 cada. Prazo de 45 dias. Pagamento 28 dias.';
 export const VALID_CNPJ = '11.222.333/0001-81';
 
-export async function setup(extra: Partial<BuildOptions> = {}) {
-  const cfg = loadConfig({ AUTH_MODE: 'dev', OMIE_MODE: 'mock', EXTRACTION_MODE: 'mock', NODE_ENV: 'test' });
+export async function setup(extra: Partial<BuildOptions> = {}, env: Parameters<typeof loadConfig>[0] = {}) {
+  const cfg = loadConfig({ AUTH_MODE: 'dev', OMIE_MODE: 'mock', EXTRACTION_MODE: 'mock', NODE_ENV: 'test', ...env });
   const database = await openDatabase({ pgliteDir: 'memory://' });
   const { app, ctx } = await buildApp({ cfg, database, logger: false, jobRetryBaseMs: 1, ...extra });
   await app.ready();
