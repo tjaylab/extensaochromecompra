@@ -70,12 +70,37 @@ export function readContact(): { contactName: string | null; contactPhone: strin
   return { contactName: title, contactPhone: subtitle && PHONE_RE.test(subtitle) ? subtitle : phoneFromMessageIds() };
 }
 
+// Delivery ticks only appear on messages sent by this account.
+const SENT_ICONS = '[data-icon="tail-out"], [data-icon^="msg-check"], [data-icon^="msg-dblcheck"], [data-icon="msg-time"]';
+const RECEIVED_ICONS = '[data-icon="tail-in"], [data-testid="author"]';
+
 function directionOf(el: Element): 'in' | 'out' {
   if (el.closest('.message-out')) return 'out';
   if (el.closest('.message-in')) return 'in';
-  // Row ids start with "true_" for messages sent by this account.
-  const id = el.closest('[data-id]')?.getAttribute('data-id') ?? '';
-  return id.startsWith('true_') ? 'out' : 'in';
+  const row = el.closest('[data-id]') ?? el;
+  // Older markup: row ids start with "true_" for messages sent by this account.
+  const id = row.getAttribute('data-id') ?? '';
+  if (id.startsWith('true_')) return 'out';
+  if (id.startsWith('false_')) return 'in';
+  // Current markup (2026): plain ids, no direction classes. Icons first, then which side the bubble sits on.
+  if (row.querySelector(SENT_ICONS)) return 'out';
+  if (row.querySelector(RECEIVED_ICONS)) return 'in';
+  const bubble = row.querySelector('[data-testid="msg-container"]') ?? row;
+  const list = row.closest('[role="application"], [data-testid="conversation-panel-messages"]') ?? conversationRoot();
+  const b = bubble.getBoundingClientRect();
+  const l = list?.getBoundingClientRect();
+  if (l && l.width > 0 && b.width > 0) return (b.left + b.right) / 2 > l.left + l.width * 0.55 ? 'out' : 'in';
+  return 'in';
+}
+
+const TEXT_SELECTOR = '.selectable-text, [data-testid="selectable-text"]';
+
+/** The bubble's own text, skipping the quoted message of a reply (it is marked up the same way). */
+function ownText(scope: Element): HTMLElement | null {
+  for (const e of scope.querySelectorAll<HTMLElement>(TEXT_SELECTOR)) {
+    if (!e.closest('[data-testid="quoted-message"]') && !e.parentElement?.closest(TEXT_SELECTOR)) return e;
+  }
+  return null;
 }
 
 export interface MessageRow {
@@ -91,7 +116,8 @@ export interface MessageRow {
   time?: string | null;
 }
 
-const ROW_ID_RE = /^(true|false)_/;
+// "false_5511…@c.us_3EB0…" (older markup) or a plain id like "3AE1612B7884760DB36D" (current markup).
+const ROW_ID_RE = /^(?:(?:true|false)_|[\w-]{12,}$)/;
 
 /** Every message bubble loaded in the open conversation, in page order (oldest first). */
 export function readMessageRows(root: ParentNode | null = conversationRoot()): MessageRow[] {
@@ -100,17 +126,22 @@ export function readMessageRows(root: ParentNode | null = conversationRoot()): M
   for (const el of root.querySelectorAll<HTMLElement>('[data-id]')) {
     const id = el.getAttribute('data-id') ?? '';
     if (!ROW_ID_RE.test(id) || el.parentElement?.closest('[data-id]')) continue; // nested ids belong to the outer row
-    const textEl = el.querySelector<HTMLElement>('[data-pre-plain-text] .selectable-text') ?? el.querySelector<HTMLElement>('[data-pre-plain-text]');
+    const pre = el.querySelector<HTMLElement>('[data-pre-plain-text]');
+    const textEl = pre ? (ownText(pre) ?? pre) : null;
     const text = (textEl?.innerText ?? textEl?.textContent ?? '').trim();
     const images = [...el.querySelectorAll<HTMLImageElement>('img[src^="blob:"]')];
-    const image = images.sort((a, b) => b.naturalWidth * b.naturalHeight - a.naturalWidth * a.naturalHeight)[0] ?? null;
+    // An image not downloaded yet shows only its thumbnail (no blob: URL); it is fetched when read.
+    const image =
+      images.sort((a, b) => b.naturalWidth * b.naturalHeight - a.naturalWidth * a.naturalHeight)[0] ??
+      el.querySelector<HTMLImageElement>('[data-testid="image-thumb"] img') ??
+      null;
     const whole = (el.innerText ?? el.textContent ?? '').replace(/\s+/g, ' ');
     // Bubble texts may run together ("Orcamento.pdf2 páginas"): ".pdf" must not be followed by a letter.
     const pdfName = whole.match(/([\w\-. ()À-ú]{1,120}\.pdf)(?![a-z])/i)?.[1]?.trim() ?? null;
     const meta = (el.querySelector('[data-pre-plain-text]')?.getAttribute('data-pre-plain-text') ?? '').match(/^\[([^\]]+)\]\s*(.*?):\s*$/);
     rows.push({
       id,
-      direction: id.startsWith('true_') ? 'out' : directionOf(el),
+      direction: directionOf(el),
       text,
       image,
       pdfName,
@@ -161,11 +192,11 @@ export function readConversation(
       const at = parseMessageTime(time);
       if (at != null && at < since) continue;
     }
-    const textEl = (el.querySelector('.selectable-text') as HTMLElement | null) ?? el;
+    const textEl = ownText(el) ?? el;
     let text = (textEl.innerText ?? textEl.textContent ?? '').trim();
     if (!text) continue;
     const row = el.closest('[data-id]') ?? el.parentElement;
-    if (row?.querySelector('img[src^="blob:"]')) text = `[imagem] ${text}`;
+    if (row?.querySelector('img[src^="blob:"], [data-testid="image-thumb"]')) text = `[imagem] ${text}`;
     const id = el.closest('[data-id]')?.getAttribute('data-id') ?? null;
     all.push({ id, direction: directionOf(el), author: meta?.[2]?.trim() || null, time, text: text.slice(0, 3000) });
   }

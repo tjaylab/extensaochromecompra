@@ -99,3 +99,34 @@ describe('contact phone from the contact info panel', () => {
     expect(readDrawerPhone()).toBeNull();
   });
 });
+
+describe('current WhatsApp markup (2026: plain ids, no direction classes)', () => {
+  const row = (id: string, inner: string) => `<div role="row"><div data-id="${id}" data-testid="conv-msg-${id}"><div data-virtualized="false"><div><div><div data-testid="msg-container">${inner}</div></div></div></div></div></div>`;
+  const text = (meta: string, t: string, extra = '') =>
+    `<div data-pre-plain-text="${meta}">${extra}<span data-testid="selectable-text" class="selectable-text"><span>${t}</span></span></div>`;
+
+  beforeEach(() => {
+    document.body.innerHTML = `
+      <div id="main">
+        <header data-testid="conversation-header"><span data-testid="conversation-info-header-chat-title" dir="auto">Carlos (Microsemi)</span></header>
+        <div data-testid="conversation-panel-messages">
+          ${row('3AE1612B7884760DB36D', `<span data-testid="tail-in" data-icon="tail-in"></span>${text('[10:47, 25/09/2026] Carlos: ', 'Fica R$ 42,10 cada')}`)}
+          ${row('3EB0A1B2C3D4E5F60718', `${text('[10:50, 25/09/2026] Ana: ', 'Fechado, pode mandar')}<div data-testid="msg-meta"><span data-icon="msg-dblcheck"></span></div>`)}
+          ${row('3AE1FFFF7884760DB36D', text('[10:52, 25/09/2026] Carlos: ', 'Na verdade R$ 40,00', '<div data-testid="quoted-message"><span class="selectable-text">Fechado, pode mandar</span></div>'))}
+          ${row('3AE1EEEE7884760DB36D', '<div data-testid="image-thumb"><img></div><div data-testid="media-state-download"></div>')}
+        </div>
+      </div>`;
+  });
+
+  it('reads rows with plain ids, direction from icons and the reply text without the quote', () => {
+    const rows = readMessageRows();
+    expect(rows.map((r) => [r.id.length, r.direction, r.text, !!r.image])).toEqual([
+      [20, 'in', 'Fica R$ 42,10 cada', false],
+      [20, 'out', 'Fechado, pode mandar', false],
+      [20, 'in', 'Na verdade R$ 40,00', false],
+      [20, 'in', '', true],
+    ]);
+    expect(readConversation().map((m) => m.text)).toEqual(['Fica R$ 42,10 cada', 'Fechado, pode mandar', 'Na verdade R$ 40,00']);
+    expect(readContact().contactName).toBe('Carlos (Microsemi)');
+  });
+});

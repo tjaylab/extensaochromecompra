@@ -150,15 +150,15 @@ export default defineContentScript({
           return true;
         }
         if (msg?.type === 'get-row-image') {
-          const img = rowImage(msg.id);
-          if (!img) {
-            sendResponse({ attachment: null, error: 'Imagem não encontrada na conversa' });
-            return;
-          }
-          imageData(img).then(
-            (attachment) => sendResponse({ attachment }),
-            (err) => sendResponse({ attachment: null, error: String(err?.message ?? err) }),
-          );
+          rowImage(msg.id)
+            .then((img) => {
+              if (!img) throw new Error('Não consegui abrir a imagem. Clique nela no WhatsApp para baixar e tente de novo.');
+              return imageData(img);
+            })
+            .then(
+              (attachment) => sendResponse({ attachment }),
+              (err) => sendResponse({ attachment: null, error: String(err?.message ?? err) }),
+            );
           return true;
         }
         if (msg?.type === 'read-row-pdf') {
@@ -241,9 +241,23 @@ export default defineContentScript({
     // ---------------------------------------------------------------------
     // Media helpers
     // ---------------------------------------------------------------------
-    function rowImage(id: string): HTMLImageElement | null {
-      const imgs = [...(rowById(id)?.querySelectorAll<HTMLImageElement>('img[src^="blob:"]') ?? [])];
+    function loadedImage(id: string): HTMLImageElement | null {
+      const imgs = [...(rowById(id)?.querySelectorAll<HTMLImageElement>('img[src^="blob:"]') ?? [])].filter((i) => i.complete && i.naturalWidth > 0);
       return imgs.sort((a, b) => b.naturalWidth * b.naturalHeight - a.naturalWidth * a.naturalHeight)[0] ?? null;
+    }
+    /** The received image; when WhatsApp hasn't downloaded it yet, clicks its download button and waits. */
+    async function rowImage(id: string): Promise<HTMLImageElement | null> {
+      const ready = loadedImage(id);
+      if (ready) return ready;
+      const download = rowById(id)?.querySelector<HTMLElement>('[data-testid="media-state-download"]');
+      if (!download) return null;
+      download.click();
+      for (let i = 0; i < 30; i++) {
+        await new Promise((r) => setTimeout(r, 500));
+        const img = loadedImage(id);
+        if (img) return img;
+      }
+      return null;
     }
 
     /**
